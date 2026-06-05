@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Ampersand Elementor MCP Orchestrator
  * Description: Orchestrates Elementor MCP abilities, exposes editor-first guardrails, and provides an admin prompt/settings page.
- * Version: 1.3.0
+ * Version: 1.3.1-dev
  * Author: Ampersand Studios
  * License: GPL-2.0-or-later
  * Requires at least: 6.8
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION', '1.3.0' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION', '1.3.1-dev' );
 define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_OPTION', 'amp_bjorn_elementor_mcp_bridge_settings' );
 define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_APP_PASSWORD_NAME', 'Ampersand Elementor MCP' );
 
@@ -207,6 +207,26 @@ function amp_bjorn_elementor_mcp_bridge_endpoint(): string {
 }
 
 /**
+ * Return the endpoint Claude Desktop should use.
+ *
+ * Claude Desktop reaches HTTP MCP servers through mcp-remote. In LocalWP,
+ * Node often rejects the self-signed HTTPS certificate, so local .local sites
+ * are easier to connect over plain HTTP. This is intended for local dev only.
+ *
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_claude_desktop_endpoint(): string {
+	$endpoint = amp_bjorn_elementor_mcp_bridge_endpoint();
+	$host     = (string) wp_parse_url( $endpoint, PHP_URL_HOST );
+
+	if ( 'local' === wp_get_environment_type() || str_ends_with( $host, '.local' ) ) {
+		return preg_replace( '#^https://#', 'http://', $endpoint ) ?: $endpoint;
+	}
+
+	return $endpoint;
+}
+
+/**
  * Generate a WordPress Application Password for the current user.
  *
  * @return array<string, string>|\WP_Error
@@ -245,6 +265,7 @@ function amp_bjorn_elementor_mcp_bridge_generate_app_password() {
 		'username'      => $user->user_login,
 		'password'      => $password,
 		'endpoint'      => amp_bjorn_elementor_mcp_bridge_endpoint(),
+		'claude_endpoint' => amp_bjorn_elementor_mcp_bridge_claude_desktop_endpoint(),
 		'authorization' => 'Basic ' . $token,
 	);
 }
@@ -284,21 +305,25 @@ function amp_bjorn_elementor_mcp_bridge_http_config_snippet( string $endpoint, s
  * @return string
  */
 function amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( string $endpoint, string $authorization ): string {
+	$args = array(
+		'-y',
+		'mcp-remote@latest',
+		$endpoint,
+	);
+
+	if ( 0 === strpos( $endpoint, 'http://' ) ) {
+		$args[] = '--allow-http';
+	}
+
+	$args[] = '--header';
+	$args[] = 'Authorization:' . $authorization;
+
 	return wp_json_encode(
 		array(
 			'mcpServers' => array(
 				'ampersand-elementor-orchestrator' => array(
 					'command' => 'npx',
-					'args'    => array(
-						'-y',
-						'mcp-remote@latest',
-						$endpoint,
-						'--header',
-						'Authorization:${AMPERSAND_ELEMENTOR_MCP_AUTH}',
-					),
-					'env'     => array(
-						'AMPERSAND_ELEMENTOR_MCP_AUTH' => $authorization,
-					),
+					'args'    => $args,
 				),
 			),
 		),
@@ -378,11 +403,12 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
 	$tools         = amp_bjorn_elementor_mcp_bridge_get_tools();
 	$prompt        = amp_bjorn_elementor_mcp_bridge_prompt();
 	$endpoint      = amp_bjorn_elementor_mcp_bridge_endpoint();
+	$claude_endpoint = amp_bjorn_elementor_mcp_bridge_claude_desktop_endpoint();
 	$current_user  = wp_get_current_user();
 	$user_login    = $current_user instanceof WP_User ? $current_user->user_login : '';
 	$profile_url   = get_edit_profile_url( get_current_user_id() );
 	$default_http_config           = amp_bjorn_elementor_mcp_bridge_http_config_snippet( $endpoint, 'Basic BASE64_USERNAME_APPLICATION_PASSWORD' );
-	$default_claude_desktop_config = amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( $endpoint, 'Basic BASE64_USERNAME_APPLICATION_PASSWORD' );
+	$default_claude_desktop_config = amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( $claude_endpoint, 'Basic BASE64_USERNAME_APPLICATION_PASSWORD' );
 	?>
 	<div class="wrap">
 		<h1>Ampersand Elementor MCP Orchestrator</h1>
@@ -411,14 +437,21 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
 					<td><input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $generated['endpoint'] ); ?>"></td>
 				</tr>
 				<tr>
+					<th scope="row">Claude Desktop Endpoint</th>
+					<td>
+						<input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $generated['claude_endpoint'] ); ?>">
+						<p class="description">For LocalWP <code>.local</code> sites this uses <code>http://</code> to avoid Node rejecting Local's self-signed HTTPS certificate.</p>
+					</td>
+				</tr>
+				<tr>
 					<th scope="row">Authorization Header</th>
 					<td><textarea readonly rows="2" class="large-text amp-mcp-copy-field"><?php echo esc_textarea( $generated['authorization'] ); ?></textarea></td>
 				</tr>
 				<tr>
 					<th scope="row">Claude Desktop JSON</th>
 					<td>
-						<p class="description">Use this for <code>claude_desktop_config.json</code>. It runs <code>mcp-remote</code> as the stdio bridge Claude Desktop expects.</p>
-						<textarea readonly rows="14" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( $generated['endpoint'], $generated['authorization'] ) ); ?></textarea>
+						<p class="description">Use this for <code>claude_desktop_config.json</code>. It runs <code>mcp-remote</code> as the stdio bridge Claude Desktop expects, adds <code>--allow-http</code> for LocalWP HTTP endpoints, and inlines the Authorization header to avoid Windows environment-variable expansion issues.</p>
+						<textarea readonly rows="14" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( $generated['claude_endpoint'], $generated['authorization'] ) ); ?></textarea>
 					</td>
 				</tr>
 				<tr>
@@ -448,6 +481,13 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
 			<tr>
 				<th scope="row">Endpoint</th>
 				<td><input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $endpoint ); ?>"></td>
+			</tr>
+			<tr>
+				<th scope="row">Claude Desktop endpoint</th>
+				<td>
+					<input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $claude_endpoint ); ?>">
+					<p class="description">Claude Desktop uses this endpoint in the <code>mcp-remote</code> snippet. LocalWP <code>.local</code> sites use HTTP plus <code>--allow-http</code> to avoid self-signed certificate failures in Node.</p>
+				</td>
 			</tr>
 			<tr>
 				<th scope="row">Claude Desktop template</th>
