@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Ampersand Elementor MCP Orchestrator
  * Description: Orchestrates Elementor MCP abilities, exposes editor-first guardrails, and provides an admin prompt/settings page.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: Ampersand Studios
  * License: GPL-2.0-or-later
  * Requires at least: 6.8
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION', '1.2.0' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION', '1.3.0' );
 define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_OPTION', 'amp_bjorn_elementor_mcp_bridge_settings' );
 define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_APP_PASSWORD_NAME', 'Ampersand Elementor MCP' );
 
@@ -250,21 +250,54 @@ function amp_bjorn_elementor_mcp_bridge_generate_app_password() {
 }
 
 /**
- * Build a copyable MCP config snippet.
+ * Build a direct HTTP MCP config snippet for clients that support HTTP MCP natively.
  *
  * @param string $endpoint Endpoint URL.
  * @param string $authorization Authorization header.
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_config_snippet( string $endpoint, string $authorization ): string {
+function amp_bjorn_elementor_mcp_bridge_http_config_snippet( string $endpoint, string $authorization ): string {
 	return wp_json_encode(
 		array(
 			'mcpServers' => array(
-				'starfish-elementor-orchestrator' => array(
+				'ampersand-elementor-orchestrator' => array(
 					'type'    => 'http',
 					'url'     => $endpoint,
 					'headers' => array(
 						'Authorization' => $authorization,
+					),
+				),
+			),
+		),
+		JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+	);
+}
+
+/**
+ * Build a Claude Desktop MCP config snippet.
+ *
+ * Claude Desktop's config is stdio-oriented, so HTTP MCP endpoints should be
+ * proxied through mcp-remote.
+ *
+ * @param string $endpoint Endpoint URL.
+ * @param string $authorization Authorization header.
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( string $endpoint, string $authorization ): string {
+	return wp_json_encode(
+		array(
+			'mcpServers' => array(
+				'ampersand-elementor-orchestrator' => array(
+					'command' => 'npx',
+					'args'    => array(
+						'-y',
+						'mcp-remote@latest',
+						$endpoint,
+						'--header',
+						'Authorization:${AMPERSAND_ELEMENTOR_MCP_AUTH}',
+					),
+					'env'     => array(
+						'AMPERSAND_ELEMENTOR_MCP_AUTH' => $authorization,
 					),
 				),
 			),
@@ -348,7 +381,8 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
 	$current_user  = wp_get_current_user();
 	$user_login    = $current_user instanceof WP_User ? $current_user->user_login : '';
 	$profile_url   = get_edit_profile_url( get_current_user_id() );
-	$default_config = amp_bjorn_elementor_mcp_bridge_config_snippet( $endpoint, 'Basic BASE64_USERNAME_APPLICATION_PASSWORD' );
+	$default_http_config           = amp_bjorn_elementor_mcp_bridge_http_config_snippet( $endpoint, 'Basic BASE64_USERNAME_APPLICATION_PASSWORD' );
+	$default_claude_desktop_config = amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( $endpoint, 'Basic BASE64_USERNAME_APPLICATION_PASSWORD' );
 	?>
 	<div class="wrap">
 		<h1>Ampersand Elementor MCP Orchestrator</h1>
@@ -381,8 +415,18 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
 					<td><textarea readonly rows="2" class="large-text amp-mcp-copy-field"><?php echo esc_textarea( $generated['authorization'] ); ?></textarea></td>
 				</tr>
 				<tr>
-					<th scope="row">Codex / Claude JSON</th>
-					<td><textarea readonly rows="10" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( amp_bjorn_elementor_mcp_bridge_config_snippet( $generated['endpoint'], $generated['authorization'] ) ); ?></textarea></td>
+					<th scope="row">Claude Desktop JSON</th>
+					<td>
+						<p class="description">Use this for <code>claude_desktop_config.json</code>. It runs <code>mcp-remote</code> as the stdio bridge Claude Desktop expects.</p>
+						<textarea readonly rows="14" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( $generated['endpoint'], $generated['authorization'] ) ); ?></textarea>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">Direct HTTP JSON</th>
+					<td>
+						<p class="description">Use this for clients that support HTTP MCP directly, such as Claude Code/Codex-style clients that accept <code>type</code>, <code>url</code>, and <code>headers</code>.</p>
+						<textarea readonly rows="10" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( amp_bjorn_elementor_mcp_bridge_http_config_snippet( $generated['endpoint'], $generated['authorization'] ) ); ?></textarea>
+					</td>
 				</tr>
 			</table>
 			<p><a href="<?php echo esc_url( $profile_url ); ?>">Revoke Application Passwords from your WordPress profile</a> when this credential is no longer needed.</p>
@@ -406,8 +450,12 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
 				<td><input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $endpoint ); ?>"></td>
 			</tr>
 			<tr>
-				<th scope="row">Config template</th>
-				<td><textarea readonly rows="10" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( $default_config ); ?></textarea></td>
+				<th scope="row">Claude Desktop template</th>
+				<td><textarea readonly rows="14" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( $default_claude_desktop_config ); ?></textarea></td>
+			</tr>
+			<tr>
+				<th scope="row">Direct HTTP template</th>
+				<td><textarea readonly rows="10" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( $default_http_config ); ?></textarea></td>
 			</tr>
 		</table>
 
