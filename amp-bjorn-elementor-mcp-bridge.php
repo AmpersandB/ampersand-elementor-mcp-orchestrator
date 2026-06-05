@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Ampersand Elementor MCP Orchestrator
  * Description: Orchestrates Elementor MCP abilities, exposes editor-first guardrails, and provides an admin prompt/settings page.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Ampersand Studios
  * License: GPL-2.0-or-later
  * Requires at least: 6.8
@@ -17,8 +17,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION', '1.1.0' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION', '1.2.0' );
 define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_OPTION', 'amp_bjorn_elementor_mcp_bridge_settings' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_APP_PASSWORD_NAME', 'Ampersand Elementor MCP' );
 
 /**
  * Return default plugin settings.
@@ -197,6 +198,82 @@ PROMPT;
 }
 
 /**
+ * Return the orchestrator endpoint URL.
+ *
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_endpoint(): string {
+	return rest_url( 'mcp/ampersand-elementor-orchestrator' );
+}
+
+/**
+ * Generate a WordPress Application Password for the current user.
+ *
+ * @return array<string, string>|\WP_Error
+ */
+function amp_bjorn_elementor_mcp_bridge_generate_app_password() {
+	if ( ! class_exists( 'WP_Application_Passwords' ) ) {
+		return new WP_Error( 'missing_application_passwords', 'WordPress Application Passwords are not available on this site.' );
+	}
+
+	$user_id = get_current_user_id();
+
+	if ( ! $user_id ) {
+		return new WP_Error( 'missing_user', 'No current user is available.' );
+	}
+
+	if ( function_exists( 'wp_is_application_passwords_available_for_user' ) && ! wp_is_application_passwords_available_for_user( get_userdata( $user_id ) ) ) {
+		return new WP_Error( 'application_passwords_disabled', 'Application Passwords are disabled for this user.' );
+	}
+
+	$created = WP_Application_Passwords::create_new_application_password(
+		$user_id,
+		array(
+			'name' => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_APP_PASSWORD_NAME . ' - ' . wp_date( 'Y-m-d H:i:s' ),
+		)
+	);
+
+	if ( is_wp_error( $created ) ) {
+		return $created;
+	}
+
+	$password = $created[0];
+	$user     = wp_get_current_user();
+	$token    = base64_encode( $user->user_login . ':' . $password );
+
+	return array(
+		'username'      => $user->user_login,
+		'password'      => $password,
+		'endpoint'      => amp_bjorn_elementor_mcp_bridge_endpoint(),
+		'authorization' => 'Basic ' . $token,
+	);
+}
+
+/**
+ * Build a copyable MCP config snippet.
+ *
+ * @param string $endpoint Endpoint URL.
+ * @param string $authorization Authorization header.
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_config_snippet( string $endpoint, string $authorization ): string {
+	return wp_json_encode(
+		array(
+			'mcpServers' => array(
+				'starfish-elementor-orchestrator' => array(
+					'type'    => 'http',
+					'url'     => $endpoint,
+					'headers' => array(
+						'Authorization' => $authorization,
+					),
+				),
+			),
+		),
+		JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+	);
+}
+
+/**
  * Show an admin notice instead of failing hard when dependencies are missing.
  *
  * @return void
@@ -256,14 +333,83 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
 		return;
 	}
 
-	$settings = amp_bjorn_elementor_mcp_bridge_get_settings();
-	$status   = amp_bjorn_elementor_mcp_bridge_plugin_status();
-	$tools    = amp_bjorn_elementor_mcp_bridge_get_tools();
-	$prompt   = amp_bjorn_elementor_mcp_bridge_prompt();
+	$generated = null;
+
+	if ( isset( $_POST['amp_bjorn_elementor_mcp_bridge_generate_password'] ) ) {
+		check_admin_referer( 'amp_bjorn_elementor_mcp_bridge_generate_password' );
+		$generated = amp_bjorn_elementor_mcp_bridge_generate_app_password();
+	}
+
+	$settings      = amp_bjorn_elementor_mcp_bridge_get_settings();
+	$status        = amp_bjorn_elementor_mcp_bridge_plugin_status();
+	$tools         = amp_bjorn_elementor_mcp_bridge_get_tools();
+	$prompt        = amp_bjorn_elementor_mcp_bridge_prompt();
+	$endpoint      = amp_bjorn_elementor_mcp_bridge_endpoint();
+	$current_user  = wp_get_current_user();
+	$user_login    = $current_user instanceof WP_User ? $current_user->user_login : '';
+	$profile_url   = get_edit_profile_url( get_current_user_id() );
+	$default_config = amp_bjorn_elementor_mcp_bridge_config_snippet( $endpoint, 'Basic BASE64_USERNAME_APPLICATION_PASSWORD' );
 	?>
 	<div class="wrap">
 		<h1>Ampersand Elementor MCP Orchestrator</h1>
 		<p>Use this page to copy the agent prompt, check MCP/Elementor plugin status, and decide which Elementor MCP tool families this orchestrator exposes.</p>
+
+		<h2>Connection Wizard</h2>
+		<p>This creates a WordPress Application Password for your current user and prints ready-to-copy MCP connection details. The password is shown once and is not stored by this plugin.</p>
+
+		<?php if ( is_wp_error( $generated ) ) : ?>
+			<div class="notice notice-error inline"><p><?php echo esc_html( $generated->get_error_message() ); ?></p></div>
+		<?php elseif ( is_array( $generated ) ) : ?>
+			<div class="notice notice-success inline">
+				<p><strong>Application Password created.</strong> Copy these values now. WordPress will not show the password again.</p>
+			</div>
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row">Username</th>
+					<td><input readonly class="regular-text amp-mcp-copy-field" value="<?php echo esc_attr( $generated['username'] ); ?>"></td>
+				</tr>
+				<tr>
+					<th scope="row">Application Password</th>
+					<td><input readonly class="regular-text amp-mcp-copy-field" value="<?php echo esc_attr( $generated['password'] ); ?>"></td>
+				</tr>
+				<tr>
+					<th scope="row">Endpoint</th>
+					<td><input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $generated['endpoint'] ); ?>"></td>
+				</tr>
+				<tr>
+					<th scope="row">Authorization Header</th>
+					<td><textarea readonly rows="2" class="large-text amp-mcp-copy-field"><?php echo esc_textarea( $generated['authorization'] ); ?></textarea></td>
+				</tr>
+				<tr>
+					<th scope="row">Codex / Claude JSON</th>
+					<td><textarea readonly rows="10" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( amp_bjorn_elementor_mcp_bridge_config_snippet( $generated['endpoint'], $generated['authorization'] ) ); ?></textarea></td>
+				</tr>
+			</table>
+			<p><a href="<?php echo esc_url( $profile_url ); ?>">Revoke Application Passwords from your WordPress profile</a> when this credential is no longer needed.</p>
+		<?php endif; ?>
+
+		<form method="post">
+			<?php wp_nonce_field( 'amp_bjorn_elementor_mcp_bridge_generate_password' ); ?>
+			<p>
+				<button type="submit" name="amp_bjorn_elementor_mcp_bridge_generate_password" value="1" class="button button-primary">Generate MCP Connection</button>
+			</p>
+		</form>
+
+		<h3>Manual Connection Details</h3>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th scope="row">Current WP user</th>
+				<td><code><?php echo esc_html( $user_login ); ?></code></td>
+			</tr>
+			<tr>
+				<th scope="row">Endpoint</th>
+				<td><input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $endpoint ); ?>"></td>
+			</tr>
+			<tr>
+				<th scope="row">Config template</th>
+				<td><textarea readonly rows="10" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( $default_config ); ?></textarea></td>
+			</tr>
+		</table>
 
 		<h2>Tool Families</h2>
 		<form method="post" action="options.php">
@@ -315,13 +461,20 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
 
 		<h2>Orchestrated MCP Endpoint</h2>
 		<p>When the official MCP Adapter dependencies are active, this plugin registers:</p>
-		<p><code><?php echo esc_html( rest_url( 'mcp/ampersand-elementor-orchestrator' ) ); ?></code></p>
+		<p><code><?php echo esc_html( $endpoint ); ?></code></p>
 		<p>Currently selected abilities: <strong><?php echo esc_html( (string) count( $tools ) ); ?></strong></p>
 
 		<h2>Agent Prompt</h2>
 		<p>Copy this prompt into Codex, Claude, or another MCP-capable agent before Elementor work.</p>
 		<textarea readonly rows="28" style="width:100%;font-family:monospace;"><?php echo esc_textarea( $prompt ); ?></textarea>
 	</div>
+	<script>
+		document.querySelectorAll('.amp-mcp-copy-field').forEach(function (field) {
+			field.addEventListener('focus', function () {
+				field.select();
+			});
+		});
+	</script>
 	<?php
 }
 
@@ -396,4 +549,3 @@ function amp_bjorn_elementor_mcp_bridge_register_server( $adapter ): void {
 	);
 }
 add_action( 'mcp_adapter_init', 'amp_bjorn_elementor_mcp_bridge_register_server', 50 );
-
