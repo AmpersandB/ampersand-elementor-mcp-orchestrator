@@ -34,6 +34,12 @@ Recommended Elementor/MCP stack:
 - EMCP Tools (`emcp-tools`) for `elementor-mcp/...` abilities.
 - This plugin.
 
+Release/download pages for the MCP plugins used by this stack:
+
+- Official WordPress MCP Adapter: <https://github.com/WordPress/mcp-adapter/releases>
+- Bjorn MCP abilities / expose abilities: <https://github.com/bjornfix/mcp-expose-abilities/releases>
+- MSRBuilds EMCP Tools / Elementor MCP: <https://github.com/msrbuilds/elementor-mcp/releases>
+
 Not recommended:
 
 - The old MSRBuilds plugin folder `elementor-mcp` should not be active together with `emcp-tools`. EMCP Tools pauses itself when the old folder is still active.
