@@ -419,6 +419,19 @@ You are working on a WordPress site that uses Elementor. Before doing any Elemen
 
 Core requirement: build Elementor pages so a non-programmer can edit them later through the WordPress and Elementor graphical UI.
 
+If the user provides an Ampersand Elementor MCP Orchestrator connection JSON and asks you to install or configure this MCP server:
+
+1. Treat the JSON as a client connection bundle, not as WordPress configuration.
+2. Choose the config shape that matches the current client:
+   - Claude Desktop: use the `claude_desktop` object.
+   - Codex: use the `codex.toml` value.
+   - Direct HTTP MCP clients: use `direct_http`, or `url` plus `headers` when the client expects manual HTTP setup.
+3. Use the client's normal MCP installation/configuration workflow when available.
+4. Ask permission before writing local config files, changing MCP settings, or restarting/reloading the client.
+5. Preserve existing MCP server entries and merge this server by the generated `server` name.
+6. Do not print the Application Password or Authorization header in chat, logs, screenshots, or documentation.
+7. After installation, reload the client and test with `initialize` and `tools/list` when the client supports it.
+
 Do not build normal page content, layouts, cards, menus, buttons, forms, typography, or sections as large HTML/CSS/JS blobs inside Elementor HTML widgets. HTML widgets are allowed only as a documented last resort for small embeds, integrations, tracking snippets, or behavior that cannot reasonably be created with native Elementor/WordPress tools.
 
 Use what a skilled human Elementor editor would use:
@@ -632,7 +645,7 @@ function ampersand_elementor_mcp_orchestrator_app_passwords_available(): bool {
 /**
  * Return the User-Agent sent by generated MCP client configs.
  *
- * Some production firewalls block REST traffic that does not identify a
+ * Some security layers block REST traffic that does not identify a
  * client. Keeping this explicit makes generated configs more reliable while
  * leaving the server-side policy visible to site owners.
  *
@@ -714,7 +727,7 @@ function ampersand_elementor_mcp_orchestrator_connection_bundle( array $generate
 			'Use the claude_desktop object for Claude Desktop.',
 			'Use the codex.toml value for Codex config.toml.',
 			'Use the direct_http object for clients that support HTTP MCP directly.',
-			'Generated configs include an explicit User-Agent because some production WAF/security layers reject REST/MCP requests without one.',
+			'Generated configs include an explicit User-Agent because some security layers reject REST/MCP requests without one.',
 		),
 		'diagnostics'     => array(
 			'plugin_status'        => $plugin_status,

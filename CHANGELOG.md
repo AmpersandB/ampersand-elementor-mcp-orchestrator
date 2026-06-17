@@ -9,6 +9,7 @@
 - Plugin/capability status table.
 - Unique MCP client server names per site/install.
 - Claude Desktop, Codex, and direct HTTP MCP config in one JSON bundle.
+- AI-assisted MCP installation guidance for clients that receive the downloaded JSON.
 - Explicit User-Agent headers in generated configs.
 - Diagnostics object in generated JSON.
 - Editor-first Elementor guardrails for Theme Builder awareness, section review gates, PDF/menu work, UTF-8 preservation, no-op patches, and large import safety.
@@ -20,6 +21,7 @@
 - Replaced internal legacy bridge prefixes with Ampersand/orchestrator naming.
 - EMCP Tools (`emcp-tools`) is treated as the current provider for `elementor-mcp/...` abilities.
 - The old `wordpress-mcp-trunk` plugin is no longer part of the expected status checklist.
+- Troubleshooting language now describes generic environment security/WAF problems instead of a project-specific staging/production case.
 - JSON output keeps Unicode readable.
 
 ### Security

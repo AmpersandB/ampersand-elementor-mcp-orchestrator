@@ -92,6 +92,21 @@ ampersand-elementor-orchestrator-<site-slug>-<instance-id>
 
 That avoids collisions when one Claude or Codex installation connects to multiple WordPress sites.
 
+## AI-Assisted MCP Installation
+
+If a user gives the downloaded JSON to Codex, Claude, or another AI client and asks it to "install this MCP", the client should:
+
+1. Treat the JSON as a client connection bundle, not as WordPress configuration.
+2. Inspect the JSON and choose the configuration shape that matches the current client:
+   - Claude Desktop: use `claude_desktop`.
+   - Codex: use `codex.toml`.
+   - Direct HTTP MCP clients: use `direct_http` or `url` plus `headers`.
+3. Use the client's normal MCP installation/configuration workflow when available.
+4. Ask permission before writing to local config files or restarting/reloading the client.
+5. Preserve existing MCP server entries and merge the new server by its generated `server` name.
+6. Avoid printing the Application Password or Authorization header in chat, logs, screenshots, or docs.
+7. After installation, reload the client and test with `initialize` and `tools/list` when the client supports it.
+
 ## Use With Claude Desktop
 
 1. Open the downloaded JSON.
@@ -142,7 +157,7 @@ The generated prompt instructs agents to:
 - Revoke old credentials from `Users -> Profile -> Application Passwords`.
 - Do not commit generated JSON files to Git.
 - Use the least-privileged WordPress admin account practical for MCP automation.
-- Production WAF/security plugins may block REST/MCP requests without a User-Agent. Generated configs include one.
+- Security plugins, WAFs, or hosting rules may block REST/MCP requests without a User-Agent. Generated configs include one.
 
 See [SECURITY.md](SECURITY.md) for reporting and operational guidance.
 
@@ -176,17 +191,17 @@ Confirm WordPress Application Passwords are enabled and the current user can use
 
 Deactivate and delete the old `elementor-mcp` plugin folder so `emcp-tools` can boot normally.
 
-Production returns `403` but staging works
+MCP or REST requests return `403` in one environment
 
-Check Wordfence, host WAF rules, REST security settings, and whether the client sends the generated User-Agent header.
+Check security plugins, host WAF rules, REST access restrictions, Application Password permissions, and whether the client sends the generated User-Agent header. If the same JSON works elsewhere, compare environment-level security and caching layers before changing the plugin.
 
-Tool count differs between staging and production
+Tool count differs between environments
 
-Compare plugin versions, active ability providers, and legacy folders. The JSON `diagnostics` object helps with this.
+Compare plugin versions, active ability providers, legacy folders, and environment-specific security/cache layers. The JSON `diagnostics` object helps with this.
 
-Claude Desktop says the MCP server is invalid
+The AI client is unsure which JSON section to install
 
-Use the `claude_desktop` object, not the `direct_http` object. Claude Desktop needs the generated `mcp-remote` command config.
+Ask the client to inspect the downloaded JSON and use its native MCP configuration path: `claude_desktop` for Claude Desktop, `codex.toml` for Codex, or `direct_http` for clients that support direct HTTP MCP.
 
 ## License
 
