@@ -16,6 +16,8 @@
 
 ### Changed
 
+- Renamed the main plugin file to `ampersand-elementor-mcp-orchestrator.php` before public adoption.
+- Replaced internal legacy bridge prefixes with Ampersand/orchestrator naming.
 - EMCP Tools (`emcp-tools`) is treated as the current provider for `elementor-mcp/...` abilities.
 - The old `wordpress-mcp-trunk` plugin is no longer part of the expected status checklist.
 - JSON output keeps Unicode readable.

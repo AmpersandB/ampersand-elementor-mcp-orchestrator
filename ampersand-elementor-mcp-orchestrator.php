@@ -9,7 +9,7 @@
  * Requires PHP: 8.0
  * Update URI: https://github.com/AmpersandB/ampersand-elementor-mcp-orchestrator
  *
- * @package Amp_Bjorn_Elementor_MCP_Bridge
+ * @package Ampersand_Elementor_MCP_Orchestrator
  */
 
 declare( strict_types=1 );
@@ -18,18 +18,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION', '1.4.0' );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_OPTION', 'amp_bjorn_elementor_mcp_bridge_settings' );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_INSTANCE_OPTION', 'amp_bjorn_elementor_mcp_bridge_instance_id' );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_APP_PASSWORD_NAME', 'Ampersand Elementor MCP' );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_ACTION', 'amp_bjorn_elementor_mcp_bridge_download_config' );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_NONCE', 'amp_bjorn_elementor_mcp_bridge_download_config' );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG', basename( __DIR__ ) );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME', basename( __DIR__ ) . '/' . basename( __FILE__ ) );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY', 'AmpersandB/ampersand-elementor-mcp-orchestrator' );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL', 'https://github.com/' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_LATEST_RELEASE_URL', 'https://api.github.com/repos/' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY . '/releases/latest' );
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_RELEASE_CACHE_KEY', 'amp_bjorn_elementor_mcp_bridge_github_release' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION', '1.4.0' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_OPTION', 'ampersand_elementor_mcp_orchestrator_settings' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_INSTANCE_OPTION', 'ampersand_elementor_mcp_orchestrator_instance_id' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_APP_PASSWORD_NAME', 'Ampersand Elementor MCP' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_ACTION', 'ampersand_elementor_mcp_orchestrator_download_config' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_NONCE', 'ampersand_elementor_mcp_orchestrator_download_config' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_SLUG', basename( __DIR__ ) );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_BASENAME', basename( __DIR__ ) . '/' . basename( __FILE__ ) );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY', 'AmpersandB/ampersand-elementor-mcp-orchestrator' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY_URL', 'https://github.com/' . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_LATEST_RELEASE_URL', 'https://api.github.com/repos/' . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY . '/releases/latest' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_RELEASE_CACHE_KEY', 'ampersand_elementor_mcp_orchestrator_github_release' );
 
 /**
  * Fetch latest public GitHub release metadata.
@@ -37,20 +37,20 @@ define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_RELEASE_CACHE_KEY', 'amp_bjorn_elementor
  * @param bool $force_refresh Whether to bypass the transient cache.
  * @return array<string, mixed>|null
  */
-function amp_bjorn_elementor_mcp_bridge_get_github_release( bool $force_refresh = false ): ?array {
-	$cached = get_site_transient( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_RELEASE_CACHE_KEY );
+function ampersand_elementor_mcp_orchestrator_get_github_release( bool $force_refresh = false ): ?array {
+	$cached = get_site_transient( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_RELEASE_CACHE_KEY );
 
 	if ( ! $force_refresh && is_array( $cached ) ) {
 		return $cached;
 	}
 
 	$response = wp_remote_get(
-		AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_LATEST_RELEASE_URL,
+		AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_LATEST_RELEASE_URL,
 		array(
 			'timeout' => 10,
 			'headers' => array(
 				'Accept'     => 'application/vnd.github+json',
-				'User-Agent' => 'AmpersandElementorMCP/' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION,
+				'User-Agent' => 'AmpersandElementorMCP/' . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION,
 			),
 		)
 	);
@@ -65,7 +65,7 @@ function amp_bjorn_elementor_mcp_bridge_get_github_release( bool $force_refresh 
 		return null;
 	}
 
-	set_site_transient( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_RELEASE_CACHE_KEY, $release, 6 * HOUR_IN_SECONDS );
+	set_site_transient( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_RELEASE_CACHE_KEY, $release, 6 * HOUR_IN_SECONDS );
 
 	return $release;
 }
@@ -76,7 +76,7 @@ function amp_bjorn_elementor_mcp_bridge_get_github_release( bool $force_refresh 
  * @param array<string, mixed> $release GitHub release payload.
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_release_version( array $release ): string {
+function ampersand_elementor_mcp_orchestrator_release_version( array $release ): string {
 	$version = ltrim( (string) $release['tag_name'], 'vV' );
 
 	return preg_match( '/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/', $version ) ? $version : '';
@@ -88,7 +88,7 @@ function amp_bjorn_elementor_mcp_bridge_release_version( array $release ): strin
  * @param array<string, mixed> $release GitHub release payload.
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_release_package_url( array $release ): string {
+function ampersand_elementor_mcp_orchestrator_release_package_url( array $release ): string {
 	if ( ! empty( $release['assets'] ) && is_array( $release['assets'] ) ) {
 		foreach ( $release['assets'] as $asset ) {
 			if ( ! is_array( $asset ) || empty( $asset['browser_download_url'] ) ) {
@@ -112,7 +112,7 @@ function amp_bjorn_elementor_mcp_bridge_release_package_url( array $release ): s
  * @param string $package Package URL.
  * @return bool
  */
-function amp_bjorn_elementor_mcp_bridge_is_trusted_package_url( string $package ): bool {
+function ampersand_elementor_mcp_orchestrator_is_trusted_package_url( string $package ): bool {
 	$host = wp_parse_url( $package, PHP_URL_HOST );
 
 	return is_string( $host ) && in_array(
@@ -133,20 +133,20 @@ function amp_bjorn_elementor_mcp_bridge_is_trusted_package_url( string $package 
  * @param array<string, mixed> $release GitHub release payload.
  * @return object|null
  */
-function amp_bjorn_elementor_mcp_bridge_update_object( array $release ): ?object {
-	$version = amp_bjorn_elementor_mcp_bridge_release_version( $release );
-	$package = amp_bjorn_elementor_mcp_bridge_release_package_url( $release );
+function ampersand_elementor_mcp_orchestrator_update_object( array $release ): ?object {
+	$version = ampersand_elementor_mcp_orchestrator_release_version( $release );
+	$package = ampersand_elementor_mcp_orchestrator_release_package_url( $release );
 
-	if ( '' === $version || '' === $package || ! amp_bjorn_elementor_mcp_bridge_is_trusted_package_url( $package ) || ! version_compare( $version, AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION, '>' ) ) {
+	if ( '' === $version || '' === $package || ! ampersand_elementor_mcp_orchestrator_is_trusted_package_url( $package ) || ! version_compare( $version, AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION, '>' ) ) {
 		return null;
 	}
 
 	return (object) array(
-		'id'            => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL,
-		'slug'          => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG,
-		'plugin'        => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME,
+		'id'            => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY_URL,
+		'slug'          => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_SLUG,
+		'plugin'        => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_BASENAME,
 		'new_version'   => $version,
-		'url'           => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL,
+		'url'           => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY_URL,
 		'package'       => $package,
 		'requires'      => '6.8',
 		'requires_php'  => '8.0',
@@ -161,35 +161,35 @@ function amp_bjorn_elementor_mcp_bridge_update_object( array $release ): ?object
  * @param object $transient Update transient.
  * @return object
  */
-function amp_bjorn_elementor_mcp_bridge_check_for_update( $transient ) {
+function ampersand_elementor_mcp_orchestrator_check_for_update( $transient ) {
 	if ( ! is_object( $transient ) ) {
 		return $transient;
 	}
 
-	$release = amp_bjorn_elementor_mcp_bridge_get_github_release();
+	$release = ampersand_elementor_mcp_orchestrator_get_github_release();
 
 	if ( ! $release ) {
 		return $transient;
 	}
 
-	$update = amp_bjorn_elementor_mcp_bridge_update_object( $release );
+	$update = ampersand_elementor_mcp_orchestrator_update_object( $release );
 
 	if ( $update ) {
-		$transient->response[ AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME ] = $update;
+		$transient->response[ AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_BASENAME ] = $update;
 	} else {
-		$transient->no_update[ AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME ] = (object) array(
-			'id'          => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL,
-			'slug'        => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG,
-			'plugin'      => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME,
-			'new_version' => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION,
-			'url'         => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL,
+		$transient->no_update[ AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_BASENAME ] = (object) array(
+			'id'          => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY_URL,
+			'slug'        => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_SLUG,
+			'plugin'      => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_BASENAME,
+			'new_version' => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION,
+			'url'         => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY_URL,
 			'package'     => '',
 		);
 	}
 
 	return $transient;
 }
-add_filter( 'pre_set_site_transient_update_plugins', 'amp_bjorn_elementor_mcp_bridge_check_for_update' );
+add_filter( 'pre_set_site_transient_update_plugins', 'ampersand_elementor_mcp_orchestrator_check_for_update' );
 
 /**
  * Show release details in the plugin update modal.
@@ -199,27 +199,27 @@ add_filter( 'pre_set_site_transient_update_plugins', 'amp_bjorn_elementor_mcp_br
  * @param object $args Request args.
  * @return mixed
  */
-function amp_bjorn_elementor_mcp_bridge_plugins_api( $result, string $action, $args ) {
-	if ( 'plugin_information' !== $action || ! is_object( $args ) || AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG !== ( $args->slug ?? '' ) ) {
+function ampersand_elementor_mcp_orchestrator_plugins_api( $result, string $action, $args ) {
+	if ( 'plugin_information' !== $action || ! is_object( $args ) || AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_SLUG !== ( $args->slug ?? '' ) ) {
 		return $result;
 	}
 
-	$release = amp_bjorn_elementor_mcp_bridge_get_github_release();
+	$release = ampersand_elementor_mcp_orchestrator_get_github_release();
 
 	if ( ! $release ) {
 		return $result;
 	}
 
-	$version = amp_bjorn_elementor_mcp_bridge_release_version( $release );
-	$package = amp_bjorn_elementor_mcp_bridge_release_package_url( $release );
+	$version = ampersand_elementor_mcp_orchestrator_release_version( $release );
+	$package = ampersand_elementor_mcp_orchestrator_release_package_url( $release );
 	$body    = isset( $release['body'] ) && '' !== trim( (string) $release['body'] ) ? (string) $release['body'] : 'See the GitHub release for details.';
 
 	return (object) array(
 		'name'          => 'Ampersand Elementor MCP Orchestrator',
-		'slug'          => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG,
+		'slug'          => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_SLUG,
 		'version'       => $version,
 		'author'        => 'Ampersand Studios',
-		'homepage'      => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL,
+		'homepage'      => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY_URL,
 		'requires'      => '6.8',
 		'requires_php'  => '8.0',
 		'tested'        => get_bloginfo( 'version' ),
@@ -230,7 +230,7 @@ function amp_bjorn_elementor_mcp_bridge_plugins_api( $result, string $action, $a
 		),
 	);
 }
-add_filter( 'plugins_api', 'amp_bjorn_elementor_mcp_bridge_plugins_api', 20, 3 );
+add_filter( 'plugins_api', 'ampersand_elementor_mcp_orchestrator_plugins_api', 20, 3 );
 
 /**
  * Rename GitHub zipball folders so WordPress updates this plugin in place.
@@ -241,8 +241,8 @@ add_filter( 'plugins_api', 'amp_bjorn_elementor_mcp_bridge_plugins_api', 20, 3 )
  * @param array<string, mixed> $hook_extra Update context.
  * @return string|\WP_Error
  */
-function amp_bjorn_elementor_mcp_bridge_fix_update_source_folder( $source, string $remote_source, $upgrader, array $hook_extra ) {
-	if ( empty( $hook_extra['plugin'] ) || AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME !== $hook_extra['plugin'] ) {
+function ampersand_elementor_mcp_orchestrator_fix_update_source_folder( $source, string $remote_source, $upgrader, array $hook_extra ) {
+	if ( empty( $hook_extra['plugin'] ) || AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_BASENAME !== $hook_extra['plugin'] ) {
 		return $source;
 	}
 
@@ -256,7 +256,7 @@ function amp_bjorn_elementor_mcp_bridge_fix_update_source_folder( $source, strin
 		return $source;
 	}
 
-	$desired_source = trailingslashit( $remote_source ) . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG;
+	$desired_source = trailingslashit( $remote_source ) . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_SLUG;
 
 	if ( trailingslashit( $source ) === trailingslashit( $desired_source ) ) {
 		return $source;
@@ -267,22 +267,22 @@ function amp_bjorn_elementor_mcp_bridge_fix_update_source_folder( $source, strin
 	}
 
 	if ( ! $wp_filesystem->move( $source, $desired_source, true ) ) {
-		return new WP_Error( 'amp_bjorn_elementor_mcp_bridge_update_rename_failed', 'Could not prepare the GitHub release folder for plugin update.' );
+		return new WP_Error( 'ampersand_elementor_mcp_orchestrator_update_rename_failed', 'Could not prepare the GitHub release folder for plugin update.' );
 	}
 
 	return $desired_source;
 }
-add_filter( 'upgrader_source_selection', 'amp_bjorn_elementor_mcp_bridge_fix_update_source_folder', 10, 4 );
+add_filter( 'upgrader_source_selection', 'ampersand_elementor_mcp_orchestrator_fix_update_source_folder', 10, 4 );
 
 /**
  * Return default plugin settings.
  *
  * @return array<string, bool>
  */
-function amp_bjorn_elementor_mcp_bridge_default_settings(): array {
+function ampersand_elementor_mcp_orchestrator_default_settings(): array {
 	return array(
-		'enable_bjorn_tools'             => true,
-		'enable_msrbuilds_tools'         => true,
+		'enable_precision_tools'         => true,
+		'enable_construction_tools'      => true,
 		'enable_editor_first_guardrails' => true,
 	);
 }
@@ -292,11 +292,11 @@ function amp_bjorn_elementor_mcp_bridge_default_settings(): array {
  *
  * @return array<string, bool>
  */
-function amp_bjorn_elementor_mcp_bridge_get_settings(): array {
-	$settings = get_option( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_OPTION, array() );
+function ampersand_elementor_mcp_orchestrator_get_settings(): array {
+	$settings = get_option( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_OPTION, array() );
 	$settings = is_array( $settings ) ? $settings : array();
 
-	return array_merge( amp_bjorn_elementor_mcp_bridge_default_settings(), array_map( 'rest_sanitize_boolean', $settings ) );
+	return array_merge( ampersand_elementor_mcp_orchestrator_default_settings(), array_map( 'rest_sanitize_boolean', $settings ) );
 }
 
 /**
@@ -305,8 +305,8 @@ function amp_bjorn_elementor_mcp_bridge_get_settings(): array {
  * @param array<string, mixed> $settings Raw settings.
  * @return array<string, bool>
  */
-function amp_bjorn_elementor_mcp_bridge_sanitize_settings( array $settings ): array {
-	$defaults  = amp_bjorn_elementor_mcp_bridge_default_settings();
+function ampersand_elementor_mcp_orchestrator_sanitize_settings( array $settings ): array {
+	$defaults  = ampersand_elementor_mcp_orchestrator_default_settings();
 	$sanitized = array();
 
 	foreach ( $defaults as $key => $default ) {
@@ -321,33 +321,33 @@ function amp_bjorn_elementor_mcp_bridge_sanitize_settings( array $settings ): ar
  *
  * @return void
  */
-function amp_bjorn_elementor_mcp_bridge_register_settings(): void {
+function ampersand_elementor_mcp_orchestrator_register_settings(): void {
 	register_setting(
-		'amp_bjorn_elementor_mcp_bridge',
-		AMP_BJORN_ELEMENTOR_MCP_BRIDGE_OPTION,
+		'ampersand_elementor_mcp_orchestrator',
+		AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_OPTION,
 		array(
 			'type'              => 'array',
-			'sanitize_callback' => 'amp_bjorn_elementor_mcp_bridge_sanitize_settings',
-			'default'           => amp_bjorn_elementor_mcp_bridge_default_settings(),
+			'sanitize_callback' => 'ampersand_elementor_mcp_orchestrator_sanitize_settings',
+			'default'           => ampersand_elementor_mcp_orchestrator_default_settings(),
 		)
 	);
 }
-add_action( 'admin_init', 'amp_bjorn_elementor_mcp_bridge_register_settings' );
-add_action( 'admin_post_' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_ACTION, 'amp_bjorn_elementor_mcp_bridge_handle_config_download' );
+add_action( 'admin_init', 'ampersand_elementor_mcp_orchestrator_register_settings' );
+add_action( 'admin_post_' . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_ACTION, 'ampersand_elementor_mcp_orchestrator_handle_config_download' );
 
 /**
  * Return active plugin map.
  *
  * @return array<string, bool>
  */
-function amp_bjorn_elementor_mcp_bridge_plugin_status(): array {
+function ampersand_elementor_mcp_orchestrator_plugin_status(): array {
 	if ( ! function_exists( 'is_plugin_active' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	}
 
 	$emcp_tools_active     = is_plugin_active( 'emcp-tools/emcp-tools.php' );
 	$legacy_emcp_active   = is_plugin_active( 'elementor-mcp/elementor-mcp.php' );
-	$msr_abilities_active = amp_bjorn_elementor_mcp_bridge_has_ability_prefix( 'elementor-mcp/' );
+	$msr_abilities_active = ampersand_elementor_mcp_orchestrator_has_ability_prefix( 'elementor-mcp/' );
 
 	return array(
 		'Elementor'                                      => is_plugin_active( 'elementor/elementor.php' ),
@@ -355,7 +355,7 @@ function amp_bjorn_elementor_mcp_bridge_plugin_status(): array {
 		'Official MCP Adapter'                           => class_exists( '\WP\MCP\Core\McpAdapter' ),
 		'WordPress Abilities API'                        => function_exists( 'wp_get_abilities' ),
 		'MCP Adapter HTTP Transport'                     => class_exists( '\WP\MCP\Transport\HttpTransport' ),
-		'MCP Abilities - Elementor'                      => amp_bjorn_elementor_mcp_bridge_has_ability_prefix( 'elementor/' ),
+		'MCP Abilities - Elementor'                      => ampersand_elementor_mcp_orchestrator_has_ability_prefix( 'elementor/' ),
 		'EMCP Tools / MCP Tools for Elementor abilities' => $emcp_tools_active || $msr_abilities_active,
 		'Legacy elementor-mcp folder active'             => $legacy_emcp_active,
 		'Ampersand MCP Orchestrator'                     => true,
@@ -367,7 +367,7 @@ function amp_bjorn_elementor_mcp_bridge_plugin_status(): array {
  *
  * @return bool
  */
-function amp_bjorn_elementor_mcp_bridge_has_legacy_emcp_conflict(): bool {
+function ampersand_elementor_mcp_orchestrator_has_legacy_emcp_conflict(): bool {
 	if ( ! function_exists( 'is_plugin_active' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	}
@@ -381,7 +381,7 @@ function amp_bjorn_elementor_mcp_bridge_has_legacy_emcp_conflict(): bool {
  * @param string $prefix Ability prefix.
  * @return bool
  */
-function amp_bjorn_elementor_mcp_bridge_has_ability_prefix( string $prefix ): bool {
+function ampersand_elementor_mcp_orchestrator_has_ability_prefix( string $prefix ): bool {
 	if ( ! function_exists( 'wp_get_abilities' ) ) {
 		return false;
 	}
@@ -400,7 +400,7 @@ function amp_bjorn_elementor_mcp_bridge_has_ability_prefix( string $prefix ): bo
  *
  * @return array<string, bool>
  */
-function amp_bjorn_elementor_mcp_bridge_dependencies(): array {
+function ampersand_elementor_mcp_orchestrator_dependencies(): array {
 	return array(
 		'abilities_api'  => function_exists( 'wp_get_abilities' ),
 		'mcp_adapter'    => class_exists( '\WP\MCP\Core\McpAdapter' ),
@@ -413,7 +413,7 @@ function amp_bjorn_elementor_mcp_bridge_dependencies(): array {
  *
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_prompt(): string {
+function ampersand_elementor_mcp_orchestrator_prompt(): string {
 	return <<<'PROMPT'
 You are working on a WordPress site that uses Elementor. Before doing any Elementor work, read and follow the site's Ampersand Elementor MCP Orchestrator guidance.
 
@@ -490,7 +490,7 @@ PROMPT;
  *
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_site_slug(): string {
+function ampersand_elementor_mcp_orchestrator_site_slug(): string {
 	$host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
 	$slug = sanitize_title( str_replace( '.', '-', $host ) );
 
@@ -502,15 +502,15 @@ function amp_bjorn_elementor_mcp_bridge_site_slug(): string {
  *
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_instance_id(): string {
-	$id = get_option( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_INSTANCE_OPTION, '' );
+function ampersand_elementor_mcp_orchestrator_instance_id(): string {
+	$id = get_option( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_INSTANCE_OPTION, '' );
 
 	if ( is_string( $id ) && preg_match( '/^[a-z0-9]{8}$/', $id ) ) {
 		return $id;
 	}
 
 	$id = strtolower( substr( str_replace( '-', '', wp_generate_uuid4() ), 0, 8 ) );
-	update_option( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_INSTANCE_OPTION, $id, false );
+	update_option( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_INSTANCE_OPTION, $id, false );
 
 	return $id;
 }
@@ -520,11 +520,11 @@ function amp_bjorn_elementor_mcp_bridge_instance_id(): string {
  *
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_config_server_name(): string {
+function ampersand_elementor_mcp_orchestrator_config_server_name(): string {
 	return sprintf(
 		'ampersand-elementor-orchestrator-%s-%s',
-		amp_bjorn_elementor_mcp_bridge_site_slug(),
-		amp_bjorn_elementor_mcp_bridge_instance_id()
+		ampersand_elementor_mcp_orchestrator_site_slug(),
+		ampersand_elementor_mcp_orchestrator_instance_id()
 	);
 }
 
@@ -534,8 +534,8 @@ function amp_bjorn_elementor_mcp_bridge_config_server_name(): string {
  * @param string $kind Config kind.
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_config_filename( string $kind ): string {
-	return sanitize_file_name( amp_bjorn_elementor_mcp_bridge_config_server_name() . '-' . $kind . '.json' );
+function ampersand_elementor_mcp_orchestrator_config_filename( string $kind ): string {
+	return sanitize_file_name( ampersand_elementor_mcp_orchestrator_config_server_name() . '-' . $kind . '.json' );
 }
 
 /**
@@ -543,7 +543,7 @@ function amp_bjorn_elementor_mcp_bridge_config_filename( string $kind ): string 
  *
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_endpoint(): string {
+function ampersand_elementor_mcp_orchestrator_endpoint(): string {
 	return rest_url( 'mcp/ampersand-elementor-orchestrator' );
 }
 
@@ -556,8 +556,8 @@ function amp_bjorn_elementor_mcp_bridge_endpoint(): string {
  *
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_claude_desktop_endpoint(): string {
-	$endpoint = amp_bjorn_elementor_mcp_bridge_endpoint();
+function ampersand_elementor_mcp_orchestrator_claude_desktop_endpoint(): string {
+	$endpoint = ampersand_elementor_mcp_orchestrator_endpoint();
 	$host     = (string) wp_parse_url( $endpoint, PHP_URL_HOST );
 
 	if ( 'local' === wp_get_environment_type() || str_ends_with( $host, '.local' ) ) {
@@ -572,7 +572,7 @@ function amp_bjorn_elementor_mcp_bridge_claude_desktop_endpoint(): string {
  *
  * @return array<string, string>|\WP_Error
  */
-function amp_bjorn_elementor_mcp_bridge_generate_app_password() {
+function ampersand_elementor_mcp_orchestrator_generate_app_password() {
 	if ( ! class_exists( 'WP_Application_Passwords' ) ) {
 		return new WP_Error( 'missing_application_passwords', 'WordPress Application Passwords are not available on this site.' );
 	}
@@ -590,7 +590,7 @@ function amp_bjorn_elementor_mcp_bridge_generate_app_password() {
 	$created = WP_Application_Passwords::create_new_application_password(
 		$user_id,
 		array(
-			'name' => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_APP_PASSWORD_NAME . ' - ' . wp_date( 'Y-m-d H:i:s' ),
+			'name' => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_APP_PASSWORD_NAME . ' - ' . wp_date( 'Y-m-d H:i:s' ),
 		)
 	);
 
@@ -605,9 +605,9 @@ function amp_bjorn_elementor_mcp_bridge_generate_app_password() {
 	return array(
 		'username'        => $user->user_login,
 		'password'        => $password,
-		'server_name'     => amp_bjorn_elementor_mcp_bridge_config_server_name(),
-		'endpoint'        => amp_bjorn_elementor_mcp_bridge_endpoint(),
-		'claude_endpoint' => amp_bjorn_elementor_mcp_bridge_claude_desktop_endpoint(),
+		'server_name'     => ampersand_elementor_mcp_orchestrator_config_server_name(),
+		'endpoint'        => ampersand_elementor_mcp_orchestrator_endpoint(),
+		'claude_endpoint' => ampersand_elementor_mcp_orchestrator_claude_desktop_endpoint(),
 		'authorization'   => 'Basic ' . $token,
 	);
 }
@@ -617,7 +617,7 @@ function amp_bjorn_elementor_mcp_bridge_generate_app_password() {
  *
  * @return bool
  */
-function amp_bjorn_elementor_mcp_bridge_app_passwords_available(): bool {
+function ampersand_elementor_mcp_orchestrator_app_passwords_available(): bool {
 	if ( ! class_exists( 'WP_Application_Passwords' ) || ! function_exists( 'wp_is_application_passwords_available' ) || ! function_exists( 'wp_is_application_passwords_available_for_user' ) ) {
 		return false;
 	}
@@ -638,8 +638,8 @@ function amp_bjorn_elementor_mcp_bridge_app_passwords_available(): bool {
  *
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_client_user_agent(): string {
-	return 'Mozilla/5.0 (compatible; AmpersandElementorMCP/' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION . '; WordPress MCP client)';
+function ampersand_elementor_mcp_orchestrator_client_user_agent(): string {
+	return 'Mozilla/5.0 (compatible; AmpersandElementorMCP/' . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION . '; WordPress MCP client)';
 }
 
 /**
@@ -648,10 +648,10 @@ function amp_bjorn_elementor_mcp_bridge_client_user_agent(): string {
  * @param string $authorization Authorization header value.
  * @return array<string, string>
  */
-function amp_bjorn_elementor_mcp_bridge_client_headers( string $authorization ): array {
+function ampersand_elementor_mcp_orchestrator_client_headers( string $authorization ): array {
 	return array(
 		'Authorization' => $authorization,
-		'User-Agent'    => amp_bjorn_elementor_mcp_bridge_client_user_agent(),
+		'User-Agent'    => ampersand_elementor_mcp_orchestrator_client_user_agent(),
 	);
 }
 
@@ -661,7 +661,7 @@ function amp_bjorn_elementor_mcp_bridge_client_headers( string $authorization ):
  * @param string $value Raw value.
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_toml_string( string $value ): string {
+function ampersand_elementor_mcp_orchestrator_toml_string( string $value ): string {
 	return str_replace(
 		array( '\\', '"' ),
 		array( '\\\\', '\"' ),
@@ -677,13 +677,13 @@ function amp_bjorn_elementor_mcp_bridge_toml_string( string $value ): string {
  * @param string $authorization Authorization header.
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_codex_toml_snippet( string $server_name, string $endpoint, string $authorization ): string {
+function ampersand_elementor_mcp_orchestrator_codex_toml_snippet( string $server_name, string $endpoint, string $authorization ): string {
 	$toml  = '[mcp_servers."' . $server_name . '"]' . "\n";
-	$toml .= 'url = "' . amp_bjorn_elementor_mcp_bridge_toml_string( $endpoint ) . '"' . "\n\n";
+	$toml .= 'url = "' . ampersand_elementor_mcp_orchestrator_toml_string( $endpoint ) . '"' . "\n\n";
 	$toml .= '[mcp_servers."' . $server_name . '".headers]' . "\n";
 
-	foreach ( amp_bjorn_elementor_mcp_bridge_client_headers( $authorization ) as $header => $value ) {
-		$toml .= $header . ' = "' . amp_bjorn_elementor_mcp_bridge_toml_string( $value ) . '"' . "\n";
+	foreach ( ampersand_elementor_mcp_orchestrator_client_headers( $authorization ) as $header => $value ) {
+		$toml .= $header . ' = "' . ampersand_elementor_mcp_orchestrator_toml_string( $value ) . '"' . "\n";
 	}
 
 	return $toml;
@@ -695,18 +695,18 @@ function amp_bjorn_elementor_mcp_bridge_codex_toml_snippet( string $server_name,
  * @param array<string, string> $generated Generated credential data.
  * @return array<string, mixed>
  */
-function amp_bjorn_elementor_mcp_bridge_connection_bundle( array $generated ): array {
+function ampersand_elementor_mcp_orchestrator_connection_bundle( array $generated ): array {
 	$server_name   = $generated['server_name'];
 	$authorization = $generated['authorization'];
-	$plugin_status = amp_bjorn_elementor_mcp_bridge_plugin_status();
-	$tools         = amp_bjorn_elementor_mcp_bridge_get_tools();
+	$plugin_status = ampersand_elementor_mcp_orchestrator_plugin_status();
+	$tools         = ampersand_elementor_mcp_orchestrator_get_tools();
 
 	return array(
 		'server'          => $server_name,
 		'site'            => home_url(),
 		'url'             => $generated['endpoint'],
 		'claude_url'      => $generated['claude_endpoint'],
-		'headers'         => amp_bjorn_elementor_mcp_bridge_client_headers( $authorization ),
+		'headers'         => ampersand_elementor_mcp_orchestrator_client_headers( $authorization ),
 		'generated_at'    => gmdate( 'c' ),
 		'notes'           => array(
 			'This file contains a WordPress Application Password. Store it securely.',
@@ -719,15 +719,15 @@ function amp_bjorn_elementor_mcp_bridge_connection_bundle( array $generated ): a
 		'diagnostics'     => array(
 			'plugin_status'        => $plugin_status,
 			'orchestrated_tools'   => count( $tools ),
-			'legacy_emcp_conflict' => amp_bjorn_elementor_mcp_bridge_has_legacy_emcp_conflict(),
+			'legacy_emcp_conflict' => ampersand_elementor_mcp_orchestrator_has_legacy_emcp_conflict(),
 		),
-		'claude_desktop'  => json_decode( amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( $generated['claude_endpoint'], $authorization ), true ),
+		'claude_desktop'  => json_decode( ampersand_elementor_mcp_orchestrator_claude_desktop_config_snippet( $generated['claude_endpoint'], $authorization ), true ),
 		'codex'           => array(
 			'config_file' => '~/.codex/config.toml',
-			'toml'        => amp_bjorn_elementor_mcp_bridge_codex_toml_snippet( $server_name, $generated['endpoint'], $authorization ),
+			'toml'        => ampersand_elementor_mcp_orchestrator_codex_toml_snippet( $server_name, $generated['endpoint'], $authorization ),
 		),
-		'direct_http'     => json_decode( amp_bjorn_elementor_mcp_bridge_http_config_snippet( $generated['endpoint'], $authorization ), true ),
-		'agent_prompt'    => amp_bjorn_elementor_mcp_bridge_prompt(),
+		'direct_http'     => json_decode( ampersand_elementor_mcp_orchestrator_http_config_snippet( $generated['endpoint'], $authorization ), true ),
+		'agent_prompt'    => ampersand_elementor_mcp_orchestrator_prompt(),
 	);
 }
 
@@ -736,14 +736,14 @@ function amp_bjorn_elementor_mcp_bridge_connection_bundle( array $generated ): a
  *
  * @return void
  */
-function amp_bjorn_elementor_mcp_bridge_handle_config_download(): void {
+function ampersand_elementor_mcp_orchestrator_handle_config_download(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_die( esc_html__( 'You are not allowed to do this.', 'ampersand-elementor-mcp-orchestrator' ) );
 	}
 
-	check_admin_referer( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_NONCE );
+	check_admin_referer( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_NONCE );
 
-	if ( ! amp_bjorn_elementor_mcp_bridge_app_passwords_available() ) {
+	if ( ! ampersand_elementor_mcp_orchestrator_app_passwords_available() ) {
 		wp_safe_redirect(
 			add_query_arg(
 				array(
@@ -756,7 +756,7 @@ function amp_bjorn_elementor_mcp_bridge_handle_config_download(): void {
 		exit;
 	}
 
-	$generated = amp_bjorn_elementor_mcp_bridge_generate_app_password();
+	$generated = ampersand_elementor_mcp_orchestrator_generate_app_password();
 
 	if ( is_wp_error( $generated ) ) {
 		wp_safe_redirect(
@@ -771,7 +771,7 @@ function amp_bjorn_elementor_mcp_bridge_handle_config_download(): void {
 		exit;
 	}
 
-	$json = wp_json_encode( amp_bjorn_elementor_mcp_bridge_connection_bundle( $generated ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+	$json = wp_json_encode( ampersand_elementor_mcp_orchestrator_connection_bundle( $generated ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 
 	if ( ! is_string( $json ) ) {
 		wp_die( esc_html__( 'Could not encode the MCP connection bundle.', 'ampersand-elementor-mcp-orchestrator' ) );
@@ -780,7 +780,7 @@ function amp_bjorn_elementor_mcp_bridge_handle_config_download(): void {
 	nocache_headers();
 	header( 'Content-Type: application/json; charset=utf-8' );
 	header( 'X-Content-Type-Options: nosniff' );
-	header( 'Content-Disposition: attachment; filename="' . amp_bjorn_elementor_mcp_bridge_config_filename( 'connection' ) . '"' );
+	header( 'Content-Disposition: attachment; filename="' . ampersand_elementor_mcp_orchestrator_config_filename( 'connection' ) . '"' );
 	header( 'Content-Length: ' . strlen( $json ) );
 	echo $json; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- raw JSON file body.
 	exit;
@@ -793,14 +793,14 @@ function amp_bjorn_elementor_mcp_bridge_handle_config_download(): void {
  * @param string $authorization Authorization header.
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_http_config_snippet( string $endpoint, string $authorization ): string {
+function ampersand_elementor_mcp_orchestrator_http_config_snippet( string $endpoint, string $authorization ): string {
 	return wp_json_encode(
 		array(
 			'mcpServers' => array(
-				amp_bjorn_elementor_mcp_bridge_config_server_name() => array(
+				ampersand_elementor_mcp_orchestrator_config_server_name() => array(
 					'type'    => 'http',
 					'url'     => $endpoint,
-					'headers' => amp_bjorn_elementor_mcp_bridge_client_headers( $authorization ),
+					'headers' => ampersand_elementor_mcp_orchestrator_client_headers( $authorization ),
 				),
 			),
 		),
@@ -818,7 +818,7 @@ function amp_bjorn_elementor_mcp_bridge_http_config_snippet( string $endpoint, s
  * @param string $authorization Authorization header.
  * @return string
  */
-function amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( string $endpoint, string $authorization ): string {
+function ampersand_elementor_mcp_orchestrator_claude_desktop_config_snippet( string $endpoint, string $authorization ): string {
 	$args = array(
 		'-y',
 		'mcp-remote@latest',
@@ -832,12 +832,12 @@ function amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( string $e
 	$args[] = '--header';
 	$args[] = 'Authorization:' . $authorization;
 	$args[] = '--header';
-	$args[] = 'User-Agent:' . amp_bjorn_elementor_mcp_bridge_client_user_agent();
+	$args[] = 'User-Agent:' . ampersand_elementor_mcp_orchestrator_client_user_agent();
 
 	return wp_json_encode(
 		array(
 			'mcpServers' => array(
-				amp_bjorn_elementor_mcp_bridge_config_server_name() => array(
+				ampersand_elementor_mcp_orchestrator_config_server_name() => array(
 					'command' => 'npx',
 					'args'    => $args,
 				),
@@ -852,12 +852,12 @@ function amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( string $e
  *
  * @return void
  */
-function amp_bjorn_elementor_mcp_bridge_admin_notice(): void {
+function ampersand_elementor_mcp_orchestrator_admin_notice(): void {
 	if ( ! current_user_can( 'activate_plugins' ) ) {
 		return;
 	}
 
-	$deps    = amp_bjorn_elementor_mcp_bridge_dependencies();
+	$deps    = ampersand_elementor_mcp_orchestrator_dependencies();
 	$missing = array();
 
 	if ( ! $deps['abilities_api'] ) {
@@ -879,37 +879,37 @@ function amp_bjorn_elementor_mcp_bridge_admin_notice(): void {
 		esc_html( implode( ', ', $missing ) )
 	);
 }
-add_action( 'admin_notices', 'amp_bjorn_elementor_mcp_bridge_admin_notice' );
+add_action( 'admin_notices', 'ampersand_elementor_mcp_orchestrator_admin_notice' );
 
 /**
  * Add settings page.
  *
  * @return void
  */
-function amp_bjorn_elementor_mcp_bridge_admin_menu(): void {
+function ampersand_elementor_mcp_orchestrator_admin_menu(): void {
 	add_options_page(
 		'Ampersand Elementor MCP',
 		'Elementor MCP',
 		'manage_options',
 		'ampersand-elementor-mcp',
-		'amp_bjorn_elementor_mcp_bridge_render_settings_page'
+		'ampersand_elementor_mcp_orchestrator_render_settings_page'
 	);
 }
-add_action( 'admin_menu', 'amp_bjorn_elementor_mcp_bridge_admin_menu' );
+add_action( 'admin_menu', 'ampersand_elementor_mcp_orchestrator_admin_menu' );
 
 /**
  * Render settings page.
  *
  * @return void
  */
-function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
+function ampersand_elementor_mcp_orchestrator_render_settings_page(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return;
 	}
 
-	$app_passwords_available = amp_bjorn_elementor_mcp_bridge_app_passwords_available();
-	$legacy_emcp_conflict    = amp_bjorn_elementor_mcp_bridge_has_legacy_emcp_conflict();
-	$status                  = amp_bjorn_elementor_mcp_bridge_plugin_status();
+	$app_passwords_available = ampersand_elementor_mcp_orchestrator_app_passwords_available();
+	$legacy_emcp_conflict    = ampersand_elementor_mcp_orchestrator_has_legacy_emcp_conflict();
+	$status                  = ampersand_elementor_mcp_orchestrator_plugin_status();
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only error display.
 	$error = isset( $_GET['amp_mcp_error'] ) ? sanitize_key( wp_unslash( $_GET['amp_mcp_error'] ) ) : '';
 	?>
@@ -934,8 +934,8 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
 		<?php endif; ?>
 
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-			<input type="hidden" name="action" value="<?php echo esc_attr( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_ACTION ); ?>">
-			<?php wp_nonce_field( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_NONCE ); ?>
+			<input type="hidden" name="action" value="<?php echo esc_attr( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_ACTION ); ?>">
+			<?php wp_nonce_field( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_NONCE ); ?>
 			<p>
 				<button type="submit" class="button button-primary button-hero" <?php disabled( ! $app_passwords_available ); ?>>Generate Application Password & Download JSON</button>
 			</p>
@@ -977,12 +977,12 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
  *
  * @return string[]
  */
-function amp_bjorn_elementor_mcp_bridge_get_tools(): array {
+function ampersand_elementor_mcp_orchestrator_get_tools(): array {
 	if ( ! function_exists( 'wp_get_abilities' ) ) {
 		return array();
 	}
 
-	$settings = amp_bjorn_elementor_mcp_bridge_get_settings();
+	$settings = ampersand_elementor_mcp_orchestrator_get_settings();
 	$tools    = array();
 
 	foreach ( wp_get_abilities() as $ability ) {
@@ -992,11 +992,11 @@ function amp_bjorn_elementor_mcp_bridge_get_tools(): array {
 
 		$name = (string) $ability->get_name();
 
-		if ( $settings['enable_bjorn_tools'] && 0 === strpos( $name, 'elementor/' ) ) {
+		if ( $settings['enable_precision_tools'] && 0 === strpos( $name, 'elementor/' ) ) {
 			$tools[] = $name;
 		}
 
-		if ( $settings['enable_msrbuilds_tools'] && 0 === strpos( $name, 'elementor-mcp/' ) ) {
+		if ( $settings['enable_construction_tools'] && 0 === strpos( $name, 'elementor-mcp/' ) ) {
 			$tools[] = $name;
 		}
 	}
@@ -1012,8 +1012,8 @@ function amp_bjorn_elementor_mcp_bridge_get_tools(): array {
  * @param object $adapter Official MCP Adapter instance.
  * @return void
  */
-function amp_bjorn_elementor_mcp_bridge_register_server( $adapter ): void {
-	$deps = amp_bjorn_elementor_mcp_bridge_dependencies();
+function ampersand_elementor_mcp_orchestrator_register_server( $adapter ): void {
+	$deps = ampersand_elementor_mcp_orchestrator_dependencies();
 
 	if ( ! $deps['abilities_api'] || ! $deps['mcp_adapter'] || ! $deps['http_transport'] ) {
 		return;
@@ -1023,7 +1023,7 @@ function amp_bjorn_elementor_mcp_bridge_register_server( $adapter ): void {
 		return;
 	}
 
-	$tools = amp_bjorn_elementor_mcp_bridge_get_tools();
+	$tools = ampersand_elementor_mcp_orchestrator_get_tools();
 
 	if ( empty( $tools ) ) {
 		return;
@@ -1035,11 +1035,11 @@ function amp_bjorn_elementor_mcp_bridge_register_server( $adapter ): void {
 		'ampersand-elementor-orchestrator',
 		'Ampersand Elementor MCP Orchestrator',
 		'Exposes selected Elementor MCP abilities with editor-first workflow guidance.',
-		'v' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION,
+		'v' . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION,
 		array( '\WP\MCP\Transport\HttpTransport' ),
 		null,
 		null,
 		$tools
 	);
 }
-add_action( 'mcp_adapter_init', 'amp_bjorn_elementor_mcp_bridge_register_server', 50 );
+add_action( 'mcp_adapter_init', 'ampersand_elementor_mcp_orchestrator_register_server', 50 );

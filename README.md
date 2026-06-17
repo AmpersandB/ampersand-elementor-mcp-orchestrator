@@ -160,7 +160,7 @@ The repository/releases must be publicly reachable for this updater. Private Git
 
 Recommended release flow:
 
-1. Update the plugin header `Version` and `AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION`.
+1. Update the plugin header `Version` and `AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION`.
 2. Create a GitHub release tag such as `v1.4.1`.
 3. Attach a plugin ZIP if available. The updater prefers release `.zip` assets and falls back to GitHub's source `zipball`.
 
