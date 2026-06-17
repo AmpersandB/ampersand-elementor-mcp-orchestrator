@@ -2,11 +2,12 @@
 /**
  * Plugin Name: Ampersand Elementor MCP Orchestrator
  * Description: Orchestrates Elementor MCP abilities, exposes editor-first guardrails, and provides an admin prompt/settings page.
- * Version: 1.3.1-dev
+ * Version: 1.4.0
  * Author: Ampersand Studios
  * License: GPL-2.0-or-later
  * Requires at least: 6.8
  * Requires PHP: 8.0
+ * Update URI: https://github.com/AmpersandB/ampersand-elementor-mcp-orchestrator
  *
  * @package Amp_Bjorn_Elementor_MCP_Bridge
  */
@@ -17,9 +18,261 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION', '1.3.1-dev' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION', '1.4.0' );
 define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_OPTION', 'amp_bjorn_elementor_mcp_bridge_settings' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_INSTANCE_OPTION', 'amp_bjorn_elementor_mcp_bridge_instance_id' );
 define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_APP_PASSWORD_NAME', 'Ampersand Elementor MCP' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_ACTION', 'amp_bjorn_elementor_mcp_bridge_download_config' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_NONCE', 'amp_bjorn_elementor_mcp_bridge_download_config' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG', basename( __DIR__ ) );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME', basename( __DIR__ ) . '/' . basename( __FILE__ ) );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY', 'AmpersandB/ampersand-elementor-mcp-orchestrator' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL', 'https://github.com/' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_LATEST_RELEASE_URL', 'https://api.github.com/repos/' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY . '/releases/latest' );
+define( 'AMP_BJORN_ELEMENTOR_MCP_BRIDGE_RELEASE_CACHE_KEY', 'amp_bjorn_elementor_mcp_bridge_github_release' );
+
+/**
+ * Fetch latest public GitHub release metadata.
+ *
+ * @param bool $force_refresh Whether to bypass the transient cache.
+ * @return array<string, mixed>|null
+ */
+function amp_bjorn_elementor_mcp_bridge_get_github_release( bool $force_refresh = false ): ?array {
+	$cached = get_site_transient( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_RELEASE_CACHE_KEY );
+
+	if ( ! $force_refresh && is_array( $cached ) ) {
+		return $cached;
+	}
+
+	$response = wp_remote_get(
+		AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_LATEST_RELEASE_URL,
+		array(
+			'timeout' => 10,
+			'headers' => array(
+				'Accept'     => 'application/vnd.github+json',
+				'User-Agent' => 'AmpersandElementorMCP/' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION,
+			),
+		)
+	);
+
+	if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+		return null;
+	}
+
+	$release = json_decode( wp_remote_retrieve_body( $response ), true );
+
+	if ( ! is_array( $release ) || empty( $release['tag_name'] ) ) {
+		return null;
+	}
+
+	set_site_transient( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_RELEASE_CACHE_KEY, $release, 6 * HOUR_IN_SECONDS );
+
+	return $release;
+}
+
+/**
+ * Convert a GitHub release tag into a semantic version.
+ *
+ * @param array<string, mixed> $release GitHub release payload.
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_release_version( array $release ): string {
+	$version = ltrim( (string) $release['tag_name'], 'vV' );
+
+	return preg_match( '/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/', $version ) ? $version : '';
+}
+
+/**
+ * Return the preferred ZIP URL for a GitHub release.
+ *
+ * @param array<string, mixed> $release GitHub release payload.
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_release_package_url( array $release ): string {
+	if ( ! empty( $release['assets'] ) && is_array( $release['assets'] ) ) {
+		foreach ( $release['assets'] as $asset ) {
+			if ( ! is_array( $asset ) || empty( $asset['browser_download_url'] ) ) {
+				continue;
+			}
+
+			$name = isset( $asset['name'] ) ? strtolower( (string) $asset['name'] ) : '';
+
+			if ( str_ends_with( $name, '.zip' ) ) {
+				return (string) $asset['browser_download_url'];
+			}
+		}
+	}
+
+	return isset( $release['zipball_url'] ) ? (string) $release['zipball_url'] : '';
+}
+
+/**
+ * Return true when a package URL is hosted by GitHub.
+ *
+ * @param string $package Package URL.
+ * @return bool
+ */
+function amp_bjorn_elementor_mcp_bridge_is_trusted_package_url( string $package ): bool {
+	$host = wp_parse_url( $package, PHP_URL_HOST );
+
+	return is_string( $host ) && in_array(
+		strtolower( $host ),
+		array(
+			'api.github.com',
+			'github.com',
+			'codeload.github.com',
+			'objects.githubusercontent.com',
+		),
+		true
+	);
+}
+
+/**
+ * Build the WordPress plugin update object.
+ *
+ * @param array<string, mixed> $release GitHub release payload.
+ * @return object|null
+ */
+function amp_bjorn_elementor_mcp_bridge_update_object( array $release ): ?object {
+	$version = amp_bjorn_elementor_mcp_bridge_release_version( $release );
+	$package = amp_bjorn_elementor_mcp_bridge_release_package_url( $release );
+
+	if ( '' === $version || '' === $package || ! amp_bjorn_elementor_mcp_bridge_is_trusted_package_url( $package ) || ! version_compare( $version, AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION, '>' ) ) {
+		return null;
+	}
+
+	return (object) array(
+		'id'            => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL,
+		'slug'          => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG,
+		'plugin'        => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME,
+		'new_version'   => $version,
+		'url'           => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL,
+		'package'       => $package,
+		'requires'      => '6.8',
+		'requires_php'  => '8.0',
+		'tested'        => get_bloginfo( 'version' ),
+		'upgrade_notice' => isset( $release['name'] ) ? (string) $release['name'] : '',
+	);
+}
+
+/**
+ * Register GitHub release updates with WordPress.
+ *
+ * @param object $transient Update transient.
+ * @return object
+ */
+function amp_bjorn_elementor_mcp_bridge_check_for_update( $transient ) {
+	if ( ! is_object( $transient ) ) {
+		return $transient;
+	}
+
+	$release = amp_bjorn_elementor_mcp_bridge_get_github_release();
+
+	if ( ! $release ) {
+		return $transient;
+	}
+
+	$update = amp_bjorn_elementor_mcp_bridge_update_object( $release );
+
+	if ( $update ) {
+		$transient->response[ AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME ] = $update;
+	} else {
+		$transient->no_update[ AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME ] = (object) array(
+			'id'          => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL,
+			'slug'        => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG,
+			'plugin'      => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME,
+			'new_version' => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION,
+			'url'         => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL,
+			'package'     => '',
+		);
+	}
+
+	return $transient;
+}
+add_filter( 'pre_set_site_transient_update_plugins', 'amp_bjorn_elementor_mcp_bridge_check_for_update' );
+
+/**
+ * Show release details in the plugin update modal.
+ *
+ * @param mixed  $result Existing result.
+ * @param string $action Plugin API action.
+ * @param object $args Request args.
+ * @return mixed
+ */
+function amp_bjorn_elementor_mcp_bridge_plugins_api( $result, string $action, $args ) {
+	if ( 'plugin_information' !== $action || ! is_object( $args ) || AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG !== ( $args->slug ?? '' ) ) {
+		return $result;
+	}
+
+	$release = amp_bjorn_elementor_mcp_bridge_get_github_release();
+
+	if ( ! $release ) {
+		return $result;
+	}
+
+	$version = amp_bjorn_elementor_mcp_bridge_release_version( $release );
+	$package = amp_bjorn_elementor_mcp_bridge_release_package_url( $release );
+	$body    = isset( $release['body'] ) && '' !== trim( (string) $release['body'] ) ? (string) $release['body'] : 'See the GitHub release for details.';
+
+	return (object) array(
+		'name'          => 'Ampersand Elementor MCP Orchestrator',
+		'slug'          => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG,
+		'version'       => $version,
+		'author'        => 'Ampersand Studios',
+		'homepage'      => AMP_BJORN_ELEMENTOR_MCP_BRIDGE_GITHUB_REPOSITORY_URL,
+		'requires'      => '6.8',
+		'requires_php'  => '8.0',
+		'tested'        => get_bloginfo( 'version' ),
+		'download_link' => $package,
+		'sections'      => array(
+			'description' => 'Orchestrates Elementor MCP abilities and editor-first guardrails.',
+			'changelog'   => wp_kses_post( wpautop( $body ) ),
+		),
+	);
+}
+add_filter( 'plugins_api', 'amp_bjorn_elementor_mcp_bridge_plugins_api', 20, 3 );
+
+/**
+ * Rename GitHub zipball folders so WordPress updates this plugin in place.
+ *
+ * @param string|\WP_Error $source Remote source path.
+ * @param string           $remote_source Parent temp path.
+ * @param object $upgrader Upgrader instance.
+ * @param array<string, mixed> $hook_extra Update context.
+ * @return string|\WP_Error
+ */
+function amp_bjorn_elementor_mcp_bridge_fix_update_source_folder( $source, string $remote_source, $upgrader, array $hook_extra ) {
+	if ( empty( $hook_extra['plugin'] ) || AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_BASENAME !== $hook_extra['plugin'] ) {
+		return $source;
+	}
+
+	if ( is_wp_error( $source ) || ! is_string( $source ) ) {
+		return $source;
+	}
+
+	global $wp_filesystem;
+
+	if ( ! $wp_filesystem ) {
+		return $source;
+	}
+
+	$desired_source = trailingslashit( $remote_source ) . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_PLUGIN_SLUG;
+
+	if ( trailingslashit( $source ) === trailingslashit( $desired_source ) ) {
+		return $source;
+	}
+
+	if ( $wp_filesystem->exists( $desired_source ) ) {
+		$wp_filesystem->delete( $desired_source, true );
+	}
+
+	if ( ! $wp_filesystem->move( $source, $desired_source, true ) ) {
+		return new WP_Error( 'amp_bjorn_elementor_mcp_bridge_update_rename_failed', 'Could not prepare the GitHub release folder for plugin update.' );
+	}
+
+	return $desired_source;
+}
+add_filter( 'upgrader_source_selection', 'amp_bjorn_elementor_mcp_bridge_fix_update_source_folder', 10, 4 );
 
 /**
  * Return default plugin settings.
@@ -80,6 +333,7 @@ function amp_bjorn_elementor_mcp_bridge_register_settings(): void {
 	);
 }
 add_action( 'admin_init', 'amp_bjorn_elementor_mcp_bridge_register_settings' );
+add_action( 'admin_post_' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_ACTION, 'amp_bjorn_elementor_mcp_bridge_handle_config_download' );
 
 /**
  * Return active plugin map.
@@ -91,17 +345,34 @@ function amp_bjorn_elementor_mcp_bridge_plugin_status(): array {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 	}
 
+	$emcp_tools_active     = is_plugin_active( 'emcp-tools/emcp-tools.php' );
+	$legacy_emcp_active   = is_plugin_active( 'elementor-mcp/elementor-mcp.php' );
+	$msr_abilities_active = amp_bjorn_elementor_mcp_bridge_has_ability_prefix( 'elementor-mcp/' );
+
 	return array(
-		'Elementor'                     => is_plugin_active( 'elementor/elementor.php' ),
-		'Elementor Pro'                 => is_plugin_active( 'elementor-pro/elementor-pro.php' ) || is_plugin_active( 'pro-elements/pro-elements.php' ),
-		'Official MCP Adapter'          => class_exists( '\WP\MCP\Core\McpAdapter' ),
-		'WordPress Abilities API'       => function_exists( 'wp_get_abilities' ),
-		'MCP Adapter HTTP Transport'    => class_exists( '\WP\MCP\Transport\HttpTransport' ),
-		'MCP Abilities - Elementor'     => amp_bjorn_elementor_mcp_bridge_has_ability_prefix( 'elementor/' ),
-		'MCP Tools for Elementor'       => amp_bjorn_elementor_mcp_bridge_has_ability_prefix( 'elementor-mcp/' ),
-		'Legacy WordPress MCP Trunk'    => is_plugin_active( 'wordpress-mcp-trunk/wordpress-mcp.php' ),
-		'Ampersand MCP Orchestrator'    => true,
+		'Elementor'                                      => is_plugin_active( 'elementor/elementor.php' ),
+		'Elementor Pro'                                  => is_plugin_active( 'elementor-pro/elementor-pro.php' ) || is_plugin_active( 'pro-elements/pro-elements.php' ),
+		'Official MCP Adapter'                           => class_exists( '\WP\MCP\Core\McpAdapter' ),
+		'WordPress Abilities API'                        => function_exists( 'wp_get_abilities' ),
+		'MCP Adapter HTTP Transport'                     => class_exists( '\WP\MCP\Transport\HttpTransport' ),
+		'MCP Abilities - Elementor'                      => amp_bjorn_elementor_mcp_bridge_has_ability_prefix( 'elementor/' ),
+		'EMCP Tools / MCP Tools for Elementor abilities' => $emcp_tools_active || $msr_abilities_active,
+		'Legacy elementor-mcp folder active'             => $legacy_emcp_active,
+		'Ampersand MCP Orchestrator'                     => true,
 	);
+}
+
+/**
+ * Return true when EMCP Tools is paused by the old elementor-mcp plugin.
+ *
+ * @return bool
+ */
+function amp_bjorn_elementor_mcp_bridge_has_legacy_emcp_conflict(): bool {
+	if ( ! function_exists( 'is_plugin_active' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+
+	return is_plugin_active( 'emcp-tools/emcp-tools.php' ) && is_plugin_active( 'elementor-mcp/elementor-mcp.php' );
 }
 
 /**
@@ -162,11 +433,23 @@ Use what a skilled human Elementor editor would use:
 
 Before writing or changing Elementor data:
 
-1. Inspect the current page/template structure.
-2. Inspect Elementor Site Settings / kit settings.
-3. Inspect existing global colors, fonts, templates, menus, and relevant page patterns.
-4. Reuse existing global styles and components when possible.
-5. If missing, create clear reusable global colors/fonts/templates/components and document them.
+1. Identify the visible URL, WordPress object ID, post type, slug, edit URL, and Elementor document ID.
+2. Determine what actually controls the rendered URL before editing: page content, single template, archive template, loop item, header, footer, popup, or global widget.
+3. Read Theme Builder conditions before writing. If a shared single/archive/template controls the visible layout, pause and ask whether to edit the shared template or create a page-specific change.
+4. Inspect Elementor Site Settings / kit settings, including global colors, global fonts, spacing defaults, container padding, gaps, width, flex/grid behavior, and existing responsive rules.
+5. Inspect existing templates, menus, reusable components, and relevant page patterns.
+6. Reuse existing global styles and components when possible.
+7. If missing, create clear reusable global colors/fonts/templates/components and document them.
+8. Do not assume Elementor defaults are neutral. Padding, gap, flex sizing, grid columns, background rendering, and cached CSS can change the final output.
+
+When source material is a PDF, menu, spreadsheet, or external document:
+
+- Treat the source document as the content source of truth.
+- Extract the content first, then verify columns, prices, symbols, accents, and visual reading order against a preview or rendered source.
+- Preserve Unicode text exactly, including words such as purée, jalapeño, Piña, Buddha’s, Pirate’s, Rosé, and d’Arenberg.
+- For menus, preserve the existing Elementor-native layout pattern. Shared prices belong once in the category/group Heading; variable prices stay with the individual item, variant, size, preparation, or add-on.
+- Keep menu sections in real Heading and Text Editor widgets so restaurant staff can edit text visually.
+- Remove, reorder, or add visible menu content only when the source document requires it.
 
 For multi-section page creation or redesign:
 
@@ -177,11 +460,14 @@ For multi-section page creation or redesign:
 
 Tool routing:
 
-- Use `elementor-mcp/...` tools for construction: creating pages, adding containers, widgets, buttons, forms, nav menus, loop grids, templates, popups, and broad layout assembly.
+- Use `elementor-mcp/...` tools for construction: creating pages, adding containers, widgets, buttons, forms, nav menus, loop grids, templates, popups, and broad layout assembly. In newer installs this may be provided by EMCP Tools (`emcp-tools`) even though the ability namespace remains `elementor-mcp/...`.
 - Use `elementor/...` tools for precision: inspecting data, patching existing elements, replacing URLs, clearing cache, design audits, repairing Elementor JSON, kit settings, and theme builder conditions.
 - Prefer the smallest safe change.
 - Read current state immediately before writing.
 - Verify immediately after writing.
+- For large imports or content syncs, make a backup first, prefer dry-run/validation if the tool supports it, clear Elementor cache, and verify the rendered output.
+- Treat "success but no matches/no changes" as a no-op. Report it as unchanged and retry with a structured element ID/settings path approach when available.
+- Avoid fragile raw JSON string matching for rich text when a parsed Elementor data path or element ID can be targeted.
 
 Completion checklist:
 
@@ -193,8 +479,63 @@ Completion checklist:
 - Global colors/fonts/styles are used or created and documented.
 - Any HTML widget is minimal, justified, and does not trap ordinary content.
 - A human editor can copy a section/widget to another page without needing to understand code.
-- Elementor cache/rendered output has been refreshed or verified when needed.
+- The correct document was edited: page content vs Theme Builder single/archive/loop/header/footer template.
+- Elementor default padding/gap/flex/grid behavior was inspected and accounted for.
+- Rendered CSS/output was verified after cache clearing, especially for backgrounds, carousels, grids, and responsive spacing.
 PROMPT;
+}
+
+/**
+ * Return a readable slug for this WordPress site.
+ *
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_site_slug(): string {
+	$host = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+	$slug = sanitize_title( str_replace( '.', '-', $host ) );
+
+	return $slug ? $slug : 'site';
+}
+
+/**
+ * Return a stable per-installation instance ID.
+ *
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_instance_id(): string {
+	$id = get_option( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_INSTANCE_OPTION, '' );
+
+	if ( is_string( $id ) && preg_match( '/^[a-z0-9]{8}$/', $id ) ) {
+		return $id;
+	}
+
+	$id = strtolower( substr( str_replace( '-', '', wp_generate_uuid4() ), 0, 8 ) );
+	update_option( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_INSTANCE_OPTION, $id, false );
+
+	return $id;
+}
+
+/**
+ * Return the unique MCP client config server name.
+ *
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_config_server_name(): string {
+	return sprintf(
+		'ampersand-elementor-orchestrator-%s-%s',
+		amp_bjorn_elementor_mcp_bridge_site_slug(),
+		amp_bjorn_elementor_mcp_bridge_instance_id()
+	);
+}
+
+/**
+ * Return a safe JSON download filename.
+ *
+ * @param string $kind Config kind.
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_config_filename( string $kind ): string {
+	return sanitize_file_name( amp_bjorn_elementor_mcp_bridge_config_server_name() . '-' . $kind . '.json' );
 }
 
 /**
@@ -262,12 +603,187 @@ function amp_bjorn_elementor_mcp_bridge_generate_app_password() {
 	$token    = base64_encode( $user->user_login . ':' . $password );
 
 	return array(
-		'username'      => $user->user_login,
-		'password'      => $password,
-		'endpoint'      => amp_bjorn_elementor_mcp_bridge_endpoint(),
+		'username'        => $user->user_login,
+		'password'        => $password,
+		'server_name'     => amp_bjorn_elementor_mcp_bridge_config_server_name(),
+		'endpoint'        => amp_bjorn_elementor_mcp_bridge_endpoint(),
 		'claude_endpoint' => amp_bjorn_elementor_mcp_bridge_claude_desktop_endpoint(),
-		'authorization' => 'Basic ' . $token,
+		'authorization'   => 'Basic ' . $token,
 	);
+}
+
+/**
+ * Check whether Application Passwords can be generated for the current user.
+ *
+ * @return bool
+ */
+function amp_bjorn_elementor_mcp_bridge_app_passwords_available(): bool {
+	if ( ! class_exists( 'WP_Application_Passwords' ) || ! function_exists( 'wp_is_application_passwords_available' ) || ! function_exists( 'wp_is_application_passwords_available_for_user' ) ) {
+		return false;
+	}
+
+	if ( ! wp_is_application_passwords_available() ) {
+		return false;
+	}
+
+	return wp_is_application_passwords_available_for_user( wp_get_current_user() );
+}
+
+/**
+ * Return the User-Agent sent by generated MCP client configs.
+ *
+ * Some production firewalls block REST traffic that does not identify a
+ * client. Keeping this explicit makes generated configs more reliable while
+ * leaving the server-side policy visible to site owners.
+ *
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_client_user_agent(): string {
+	return 'Mozilla/5.0 (compatible; AmpersandElementorMCP/' . AMP_BJORN_ELEMENTOR_MCP_BRIDGE_VERSION . '; WordPress MCP client)';
+}
+
+/**
+ * Return headers for generated MCP client configs.
+ *
+ * @param string $authorization Authorization header value.
+ * @return array<string, string>
+ */
+function amp_bjorn_elementor_mcp_bridge_client_headers( string $authorization ): array {
+	return array(
+		'Authorization' => $authorization,
+		'User-Agent'    => amp_bjorn_elementor_mcp_bridge_client_user_agent(),
+	);
+}
+
+/**
+ * Escape a scalar value for a simple TOML string.
+ *
+ * @param string $value Raw value.
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_toml_string( string $value ): string {
+	return str_replace(
+		array( '\\', '"' ),
+		array( '\\\\', '\"' ),
+		$value
+	);
+}
+
+/**
+ * Build a Codex TOML snippet for the generated credential.
+ *
+ * @param string $server_name Server name.
+ * @param string $endpoint Endpoint URL.
+ * @param string $authorization Authorization header.
+ * @return string
+ */
+function amp_bjorn_elementor_mcp_bridge_codex_toml_snippet( string $server_name, string $endpoint, string $authorization ): string {
+	$toml  = '[mcp_servers."' . $server_name . '"]' . "\n";
+	$toml .= 'url = "' . amp_bjorn_elementor_mcp_bridge_toml_string( $endpoint ) . '"' . "\n\n";
+	$toml .= '[mcp_servers."' . $server_name . '".headers]' . "\n";
+
+	foreach ( amp_bjorn_elementor_mcp_bridge_client_headers( $authorization ) as $header => $value ) {
+		$toml .= $header . ' = "' . amp_bjorn_elementor_mcp_bridge_toml_string( $value ) . '"' . "\n";
+	}
+
+	return $toml;
+}
+
+/**
+ * Build the single downloaded config bundle.
+ *
+ * @param array<string, string> $generated Generated credential data.
+ * @return array<string, mixed>
+ */
+function amp_bjorn_elementor_mcp_bridge_connection_bundle( array $generated ): array {
+	$server_name   = $generated['server_name'];
+	$authorization = $generated['authorization'];
+	$plugin_status = amp_bjorn_elementor_mcp_bridge_plugin_status();
+	$tools         = amp_bjorn_elementor_mcp_bridge_get_tools();
+
+	return array(
+		'server'          => $server_name,
+		'site'            => home_url(),
+		'url'             => $generated['endpoint'],
+		'claude_url'      => $generated['claude_endpoint'],
+		'headers'         => amp_bjorn_elementor_mcp_bridge_client_headers( $authorization ),
+		'generated_at'    => gmdate( 'c' ),
+		'notes'           => array(
+			'This file contains a WordPress Application Password. Store it securely.',
+			'The password is shown only once by WordPress and can be revoked from Users -> Profile -> Application Passwords.',
+			'Use the claude_desktop object for Claude Desktop.',
+			'Use the codex.toml value for Codex config.toml.',
+			'Use the direct_http object for clients that support HTTP MCP directly.',
+			'Generated configs include an explicit User-Agent because some production WAF/security layers reject REST/MCP requests without one.',
+		),
+		'diagnostics'     => array(
+			'plugin_status'        => $plugin_status,
+			'orchestrated_tools'   => count( $tools ),
+			'legacy_emcp_conflict' => amp_bjorn_elementor_mcp_bridge_has_legacy_emcp_conflict(),
+		),
+		'claude_desktop'  => json_decode( amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( $generated['claude_endpoint'], $authorization ), true ),
+		'codex'           => array(
+			'config_file' => '~/.codex/config.toml',
+			'toml'        => amp_bjorn_elementor_mcp_bridge_codex_toml_snippet( $server_name, $generated['endpoint'], $authorization ),
+		),
+		'direct_http'     => json_decode( amp_bjorn_elementor_mcp_bridge_http_config_snippet( $generated['endpoint'], $authorization ), true ),
+		'agent_prompt'    => amp_bjorn_elementor_mcp_bridge_prompt(),
+	);
+}
+
+/**
+ * Generate an Application Password and stream a JSON connection bundle.
+ *
+ * @return void
+ */
+function amp_bjorn_elementor_mcp_bridge_handle_config_download(): void {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( esc_html__( 'You are not allowed to do this.', 'ampersand-elementor-mcp-orchestrator' ) );
+	}
+
+	check_admin_referer( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_NONCE );
+
+	if ( ! amp_bjorn_elementor_mcp_bridge_app_passwords_available() ) {
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'          => 'ampersand-elementor-mcp',
+					'amp_mcp_error' => 'app_passwords_unavailable',
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
+	}
+
+	$generated = amp_bjorn_elementor_mcp_bridge_generate_app_password();
+
+	if ( is_wp_error( $generated ) ) {
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'          => 'ampersand-elementor-mcp',
+					'amp_mcp_error' => rawurlencode( $generated->get_error_code() ),
+				),
+				admin_url( 'options-general.php' )
+			)
+		);
+		exit;
+	}
+
+	$json = wp_json_encode( amp_bjorn_elementor_mcp_bridge_connection_bundle( $generated ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+
+	if ( ! is_string( $json ) ) {
+		wp_die( esc_html__( 'Could not encode the MCP connection bundle.', 'ampersand-elementor-mcp-orchestrator' ) );
+	}
+
+	nocache_headers();
+	header( 'Content-Type: application/json; charset=utf-8' );
+	header( 'X-Content-Type-Options: nosniff' );
+	header( 'Content-Disposition: attachment; filename="' . amp_bjorn_elementor_mcp_bridge_config_filename( 'connection' ) . '"' );
+	header( 'Content-Length: ' . strlen( $json ) );
+	echo $json; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- raw JSON file body.
+	exit;
 }
 
 /**
@@ -281,16 +797,14 @@ function amp_bjorn_elementor_mcp_bridge_http_config_snippet( string $endpoint, s
 	return wp_json_encode(
 		array(
 			'mcpServers' => array(
-				'ampersand-elementor-orchestrator' => array(
+				amp_bjorn_elementor_mcp_bridge_config_server_name() => array(
 					'type'    => 'http',
 					'url'     => $endpoint,
-					'headers' => array(
-						'Authorization' => $authorization,
-					),
+					'headers' => amp_bjorn_elementor_mcp_bridge_client_headers( $authorization ),
 				),
 			),
 		),
-		JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+		JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 	);
 }
 
@@ -317,17 +831,19 @@ function amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( string $e
 
 	$args[] = '--header';
 	$args[] = 'Authorization:' . $authorization;
+	$args[] = '--header';
+	$args[] = 'User-Agent:' . amp_bjorn_elementor_mcp_bridge_client_user_agent();
 
 	return wp_json_encode(
 		array(
 			'mcpServers' => array(
-				'ampersand-elementor-orchestrator' => array(
+				amp_bjorn_elementor_mcp_bridge_config_server_name() => array(
 					'command' => 'npx',
 					'args'    => $args,
 				),
 			),
 		),
-		JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+		JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 	);
 }
 
@@ -391,178 +907,68 @@ function amp_bjorn_elementor_mcp_bridge_render_settings_page(): void {
 		return;
 	}
 
-	$generated = null;
-
-	if ( isset( $_POST['amp_bjorn_elementor_mcp_bridge_generate_password'] ) ) {
-		check_admin_referer( 'amp_bjorn_elementor_mcp_bridge_generate_password' );
-		$generated = amp_bjorn_elementor_mcp_bridge_generate_app_password();
-	}
-
-	$settings      = amp_bjorn_elementor_mcp_bridge_get_settings();
-	$status        = amp_bjorn_elementor_mcp_bridge_plugin_status();
-	$tools         = amp_bjorn_elementor_mcp_bridge_get_tools();
-	$prompt        = amp_bjorn_elementor_mcp_bridge_prompt();
-	$endpoint      = amp_bjorn_elementor_mcp_bridge_endpoint();
-	$claude_endpoint = amp_bjorn_elementor_mcp_bridge_claude_desktop_endpoint();
-	$current_user  = wp_get_current_user();
-	$user_login    = $current_user instanceof WP_User ? $current_user->user_login : '';
-	$profile_url   = get_edit_profile_url( get_current_user_id() );
-	$default_http_config           = amp_bjorn_elementor_mcp_bridge_http_config_snippet( $endpoint, 'Basic BASE64_USERNAME_APPLICATION_PASSWORD' );
-	$default_claude_desktop_config = amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( $claude_endpoint, 'Basic BASE64_USERNAME_APPLICATION_PASSWORD' );
+	$app_passwords_available = amp_bjorn_elementor_mcp_bridge_app_passwords_available();
+	$legacy_emcp_conflict    = amp_bjorn_elementor_mcp_bridge_has_legacy_emcp_conflict();
+	$status                  = amp_bjorn_elementor_mcp_bridge_plugin_status();
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only error display.
+	$error = isset( $_GET['amp_mcp_error'] ) ? sanitize_key( wp_unslash( $_GET['amp_mcp_error'] ) ) : '';
 	?>
-	<div class="wrap">
+	<div class="wrap amp-mcp">
 		<h1>Ampersand Elementor MCP Orchestrator</h1>
-		<p>Use this page to copy the agent prompt, check MCP/Elementor plugin status, and decide which Elementor MCP tool families this orchestrator exposes.</p>
+		<p class="description">Generate one connection file for Claude Desktop, Codex, and direct HTTP MCP clients.</p>
 
-		<h2>Connection Wizard</h2>
-		<p>This creates a WordPress Application Password for your current user and prints ready-to-copy MCP connection details. The password is shown once and is not stored by this plugin.</p>
-
-		<?php if ( is_wp_error( $generated ) ) : ?>
-			<div class="notice notice-error inline"><p><?php echo esc_html( $generated->get_error_message() ); ?></p></div>
-		<?php elseif ( is_array( $generated ) ) : ?>
-			<div class="notice notice-success inline">
-				<p><strong>Application Password created.</strong> Copy these values now. WordPress will not show the password again.</p>
+		<?php if ( 'app_passwords_unavailable' === $error || ! $app_passwords_available ) : ?>
+			<div class="notice notice-error inline">
+				<p>Application Passwords are not available for this user/site. Enable them, then reload this page.</p>
 			</div>
-			<table class="form-table" role="presentation">
-				<tr>
-					<th scope="row">Username</th>
-					<td><input readonly class="regular-text amp-mcp-copy-field" value="<?php echo esc_attr( $generated['username'] ); ?>"></td>
-				</tr>
-				<tr>
-					<th scope="row">Application Password</th>
-					<td><input readonly class="regular-text amp-mcp-copy-field" value="<?php echo esc_attr( $generated['password'] ); ?>"></td>
-				</tr>
-				<tr>
-					<th scope="row">Endpoint</th>
-					<td><input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $generated['endpoint'] ); ?>"></td>
-				</tr>
-				<tr>
-					<th scope="row">Claude Desktop Endpoint</th>
-					<td>
-						<input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $generated['claude_endpoint'] ); ?>">
-						<p class="description">For LocalWP <code>.local</code> sites this uses <code>http://</code> to avoid Node rejecting Local's self-signed HTTPS certificate.</p>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row">Authorization Header</th>
-					<td><textarea readonly rows="2" class="large-text amp-mcp-copy-field"><?php echo esc_textarea( $generated['authorization'] ); ?></textarea></td>
-				</tr>
-				<tr>
-					<th scope="row">Claude Desktop JSON</th>
-					<td>
-						<p class="description">Use this for <code>claude_desktop_config.json</code>. It runs <code>mcp-remote</code> as the stdio bridge Claude Desktop expects, adds <code>--allow-http</code> for LocalWP HTTP endpoints, and inlines the Authorization header to avoid Windows environment-variable expansion issues.</p>
-						<textarea readonly rows="14" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( amp_bjorn_elementor_mcp_bridge_claude_desktop_config_snippet( $generated['claude_endpoint'], $generated['authorization'] ) ); ?></textarea>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row">Direct HTTP JSON</th>
-					<td>
-						<p class="description">Use this for clients that support HTTP MCP directly, such as Claude Code/Codex-style clients that accept <code>type</code>, <code>url</code>, and <code>headers</code>.</p>
-						<textarea readonly rows="10" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( amp_bjorn_elementor_mcp_bridge_http_config_snippet( $generated['endpoint'], $generated['authorization'] ) ); ?></textarea>
-					</td>
-				</tr>
-			</table>
-			<p><a href="<?php echo esc_url( $profile_url ); ?>">Revoke Application Passwords from your WordPress profile</a> when this credential is no longer needed.</p>
+		<?php elseif ( $error ) : ?>
+			<div class="notice notice-error inline">
+				<p>Could not create the MCP connection file. Error: <code><?php echo esc_html( $error ); ?></code></p>
+			</div>
 		<?php endif; ?>
 
-		<form method="post">
-			<?php wp_nonce_field( 'amp_bjorn_elementor_mcp_bridge_generate_password' ); ?>
+		<?php if ( $legacy_emcp_conflict ) : ?>
+			<div class="notice notice-warning inline">
+				<p><strong>EMCP Tools upgrade conflict:</strong> the old <code>elementor-mcp</code> plugin is active alongside <code>emcp-tools</code>. Deactivate and delete the old plugin so EMCP Tools can boot normally.</p>
+			</div>
+		<?php endif; ?>
+
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+			<input type="hidden" name="action" value="<?php echo esc_attr( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_ACTION ); ?>">
+			<?php wp_nonce_field( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_DOWNLOAD_NONCE ); ?>
 			<p>
-				<button type="submit" name="amp_bjorn_elementor_mcp_bridge_generate_password" value="1" class="button button-primary">Generate MCP Connection</button>
+				<button type="submit" class="button button-primary button-hero" <?php disabled( ! $app_passwords_available ); ?>>Generate Application Password & Download JSON</button>
 			</p>
 		</form>
 
-		<h3>Manual Connection Details</h3>
-		<table class="form-table" role="presentation">
-			<tr>
-				<th scope="row">Current WP user</th>
-				<td><code><?php echo esc_html( $user_login ); ?></code></td>
-			</tr>
-			<tr>
-				<th scope="row">Endpoint</th>
-				<td><input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $endpoint ); ?>"></td>
-			</tr>
-			<tr>
-				<th scope="row">Claude Desktop endpoint</th>
-				<td>
-					<input readonly class="large-text amp-mcp-copy-field" value="<?php echo esc_url( $claude_endpoint ); ?>">
-					<p class="description">Claude Desktop uses this endpoint in the <code>mcp-remote</code> snippet. LocalWP <code>.local</code> sites use HTTP plus <code>--allow-http</code> to avoid self-signed certificate failures in Node.</p>
-				</td>
-			</tr>
-			<tr>
-				<th scope="row">Claude Desktop template</th>
-				<td><textarea readonly rows="14" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( $default_claude_desktop_config ); ?></textarea></td>
-			</tr>
-			<tr>
-				<th scope="row">Direct HTTP template</th>
-				<td><textarea readonly rows="10" class="large-text code amp-mcp-copy-field"><?php echo esc_textarea( $default_http_config ); ?></textarea></td>
-			</tr>
-		</table>
-
-		<h2>Tool Families</h2>
-		<form method="post" action="options.php">
-			<?php settings_fields( 'amp_bjorn_elementor_mcp_bridge' ); ?>
-			<table class="form-table" role="presentation">
+		<h2>Plugin Status</h2>
+		<table class="widefat striped" style="max-width: 820px;">
+			<thead>
 				<tr>
-					<th scope="row">Bjorn precision tools</th>
-					<td>
-						<label>
-							<input type="checkbox" name="<?php echo esc_attr( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_OPTION ); ?>[enable_bjorn_tools]" value="1" <?php checked( $settings['enable_bjorn_tools'] ); ?>>
-							Expose abilities beginning with <code>elementor/</code>.
-						</label>
-					</td>
+					<th>Capability</th>
+					<th>Status</th>
 				</tr>
-				<tr>
-					<th scope="row">MSRBuilds construction tools</th>
-					<td>
-						<label>
-							<input type="checkbox" name="<?php echo esc_attr( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_OPTION ); ?>[enable_msrbuilds_tools]" value="1" <?php checked( $settings['enable_msrbuilds_tools'] ); ?>>
-							Expose abilities beginning with <code>elementor-mcp/</code> when available.
-						</label>
-					</td>
-				</tr>
-				<tr>
-					<th scope="row">Editor-first guardrails</th>
-					<td>
-						<label>
-							<input type="checkbox" name="<?php echo esc_attr( AMP_BJORN_ELEMENTOR_MCP_BRIDGE_OPTION ); ?>[enable_editor_first_guardrails]" value="1" <?php checked( $settings['enable_editor_first_guardrails'] ); ?>>
-							Show and expose the human-editable Elementor workflow prompt.
-						</label>
-					</td>
-				</tr>
-			</table>
-			<?php submit_button(); ?>
-		</form>
-
-		<h2>Installed / Active Tools</h2>
-		<table class="widefat striped" style="max-width: 900px;">
-			<thead><tr><th>Capability</th><th>Status</th></tr></thead>
+			</thead>
 			<tbody>
 				<?php foreach ( $status as $label => $active ) : ?>
+					<?php
+					$is_legacy_row = 'Legacy elementor-mcp folder active' === $label;
+					$status_text   = $active ? 'Active / Available' : 'Missing / Inactive';
+					$status_color  = $active ? '#008a20' : '#b32d2e';
+
+					if ( $is_legacy_row ) {
+						$status_text  = $active ? 'Active - remove old plugin' : 'Not detected / OK';
+						$status_color = $active ? '#b32d2e' : '#008a20';
+					}
+					?>
 					<tr>
 						<td><?php echo esc_html( $label ); ?></td>
-						<td><?php echo $active ? '<span style="color:#008a20;">Active / Available</span>' : '<span style="color:#b32d2e;">Missing / Inactive</span>'; ?></td>
+						<td><span style="color: <?php echo esc_attr( $status_color ); ?>;"><?php echo esc_html( $status_text ); ?></span></td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>
 		</table>
-
-		<h2>Orchestrated MCP Endpoint</h2>
-		<p>When the official MCP Adapter dependencies are active, this plugin registers:</p>
-		<p><code><?php echo esc_html( $endpoint ); ?></code></p>
-		<p>Currently selected abilities: <strong><?php echo esc_html( (string) count( $tools ) ); ?></strong></p>
-
-		<h2>Agent Prompt</h2>
-		<p>Copy this prompt into Codex, Claude, or another MCP-capable agent before Elementor work.</p>
-		<textarea readonly rows="28" style="width:100%;font-family:monospace;"><?php echo esc_textarea( $prompt ); ?></textarea>
 	</div>
-	<script>
-		document.querySelectorAll('.amp-mcp-copy-field').forEach(function (field) {
-			field.addEventListener('focus', function () {
-				field.select();
-			});
-		});
-	</script>
 	<?php
 }
 
