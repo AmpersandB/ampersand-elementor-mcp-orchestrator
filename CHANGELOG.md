@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.5.0 - 2026-06-26
+
+### Added
+
+- Curated default MCP tool allowlist to keep Claude Desktop and similar clients below practical tool registration limits.
+- Admin tool-set controls with opt-in groups for WooCommerce, Elementor v4 atomic widgets, extended widgets, code injection, design QA, form submissions, and site maintenance.
+- Live selected/available tool count with a warning when the selected tool set exceeds the recommended threshold.
+- Cached resolved tool names keyed by plugin version, settings, and cache salt.
+
+### Changed
+
+- The orchestrator no longer exposes every `elementor/...` and `elementor-mcp/...` ability by default.
+- Fresh installs now expose the editor-first core workflow tools only; heavier or riskier capabilities are one checkbox away.
+
+### Security
+
+- PHP snippet and custom code capabilities are now disabled by default behind a security-sensitive opt-in group.
+
 ## 1.4.0 - 2026-06-17
 
 ### Added

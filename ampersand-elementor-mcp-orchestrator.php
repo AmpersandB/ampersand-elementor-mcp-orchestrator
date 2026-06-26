@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Ampersand Elementor MCP Orchestrator
  * Description: Orchestrates Elementor MCP abilities, exposes editor-first guardrails, and provides an admin prompt/settings page.
- * Version: 1.4.0
+ * Version: 1.5.0
  * Author: Ampersand Studios
  * License: GPL-2.0-or-later
  * Requires at least: 6.8
@@ -18,12 +18,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION', '1.4.0' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION', '1.5.0' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_OPTION', 'ampersand_elementor_mcp_orchestrator_settings' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_INSTANCE_OPTION', 'ampersand_elementor_mcp_orchestrator_instance_id' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_TOOL_CACHE_SALT_OPTION', 'ampersand_elementor_mcp_orchestrator_tool_cache_salt' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_APP_PASSWORD_NAME', 'Ampersand Elementor MCP' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_ACTION', 'ampersand_elementor_mcp_orchestrator_download_config' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_NONCE', 'ampersand_elementor_mcp_orchestrator_download_config' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_TOOL_WARNING_THRESHOLD', 80 );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_SLUG', basename( __DIR__ ) );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_BASENAME', basename( __DIR__ ) . '/' . basename( __FILE__ ) );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY', 'AmpersandB/ampersand-elementor-mcp-orchestrator' );
@@ -275,16 +277,245 @@ function ampersand_elementor_mcp_orchestrator_fix_update_source_folder( $source,
 add_filter( 'upgrader_source_selection', 'ampersand_elementor_mcp_orchestrator_fix_update_source_folder', 10, 4 );
 
 /**
+ * Return MCP tool groups exposed by the orchestrator.
+ *
+ * @return array<string, array<string, mixed>>
+ */
+function ampersand_elementor_mcp_orchestrator_tool_groups(): array {
+	return array(
+		'core'             => array(
+			'setting'     => 'enable_core_tools',
+			'label'       => 'Curated core tools',
+			'description' => 'Default editor-first Elementor workflow tools. Keep this on for normal page building.',
+			'default'     => true,
+			'abilities'   => array(
+				'elementor-mcp/list-pages',
+				'elementor-mcp/list-templates',
+				'elementor-mcp/list-widgets',
+				'elementor-mcp/list-media',
+				'elementor-mcp/get-page-structure',
+				'elementor-mcp/get-element-settings',
+				'elementor-mcp/get-widget-schema',
+				'elementor-mcp/get-global-settings',
+				'elementor-mcp/detect-elementor-version',
+				'elementor/find-elements',
+				'elementor/get-theme-builder-conditions',
+				'elementor-mcp/add-container',
+				'elementor-mcp/add-heading',
+				'elementor-mcp/add-text-editor',
+				'elementor-mcp/add-button',
+				'elementor-mcp/add-image',
+				'elementor-mcp/add-gallery',
+				'elementor-mcp/add-icon',
+				'elementor-mcp/add-icon-box',
+				'elementor-mcp/add-icon-list',
+				'elementor-mcp/add-image-box',
+				'elementor-mcp/add-image-carousel',
+				'elementor-mcp/add-spacer',
+				'elementor-mcp/add-divider',
+				'elementor-mcp/add-video',
+				'elementor-mcp/add-google-maps',
+				'elementor-mcp/add-social-icons',
+				'elementor-mcp/add-html',
+				'elementor-mcp/add-shortcode',
+				'elementor-mcp/add-star-rating',
+				'elementor-mcp/add-tabs',
+				'elementor-mcp/add-accordion',
+				'elementor-mcp/add-toggle',
+				'elementor-mcp/add-slides',
+				'elementor-mcp/add-testimonial',
+				'elementor-mcp/add-testimonial-carousel',
+				'elementor-mcp/add-call-to-action',
+				'elementor-mcp/add-counter',
+				'elementor-mcp/add-nav-menu',
+				'elementor-mcp/add-search',
+				'elementor-mcp/add-form',
+				'elementor-mcp/add-loop-grid',
+				'elementor-mcp/add-posts-grid',
+				'elementor-mcp/set-dynamic-tag',
+				'elementor-mcp/update-element',
+				'elementor-mcp/update-widget',
+				'elementor-mcp/update-container',
+				'elementor-mcp/move-element',
+				'elementor-mcp/remove-element',
+				'elementor-mcp/duplicate-element',
+				'elementor-mcp/reorder-elements',
+				'elementor-mcp/batch-update',
+				'elementor-mcp/create-page',
+				'elementor-mcp/build-page',
+				'elementor-mcp/apply-template',
+				'elementor-mcp/save-as-template',
+				'elementor-mcp/create-popup',
+				'elementor-mcp/set-template-conditions',
+				'elementor-mcp/update-global-colors',
+				'elementor-mcp/update-global-typography',
+				'elementor-mcp/update-page-settings',
+				'elementor/get-kit-settings',
+				'elementor/update-kit-settings',
+				'elementor-mcp/search-images',
+				'elementor-mcp/sideload-image',
+				'elementor-mcp/upload-svg-icon',
+				'elementor/clear-cache',
+				'elementor/replace-urls',
+			),
+		),
+		'woocommerce'      => array(
+			'setting'     => 'enable_group_woocommerce',
+			'label'       => 'WooCommerce widgets',
+			'description' => 'Product, cart, checkout, and menu cart widgets.',
+			'default'     => false,
+			'abilities'   => array(
+				'elementor-mcp/add-wc-products',
+				'elementor-mcp/add-wc-add-to-cart',
+				'elementor-mcp/add-wc-cart',
+				'elementor-mcp/add-wc-checkout',
+				'elementor-mcp/add-wc-menu-cart',
+			),
+		),
+		'atomic_v4'        => array(
+			'setting'     => 'enable_group_atomic_v4',
+			'label'       => 'Elementor v4 atomic widgets',
+			'description' => 'Atomic/flexbox widgets for sites intentionally using Elementor v4 patterns.',
+			'default'     => false,
+			'abilities'   => array(
+				'elementor-mcp/add-flexbox',
+				'elementor-mcp/add-div-block',
+				'elementor-mcp/add-atomic-heading',
+				'elementor-mcp/add-atomic-paragraph',
+				'elementor-mcp/add-atomic-button',
+				'elementor-mcp/add-atomic-image',
+				'elementor-mcp/add-atomic-svg',
+				'elementor-mcp/add-atomic-video',
+				'elementor-mcp/add-atomic-youtube',
+				'elementor-mcp/add-atomic-divider',
+				'elementor-mcp/add-atomic-widget',
+				'elementor-mcp/update-atomic-widget',
+			),
+		),
+		'extended_widgets' => array(
+			'setting'     => 'enable_group_extended_widgets',
+			'label'       => 'Extended widgets',
+			'description' => 'Niche or decorative widgets that are useful only on some projects.',
+			'default'     => false,
+			'abilities'   => array(
+				'elementor-mcp/add-flip-box',
+				'elementor-mcp/add-hotspot',
+				'elementor-mcp/add-countdown',
+				'elementor-mcp/add-animated-headline',
+				'elementor-mcp/add-text-path',
+				'elementor-mcp/add-lottie',
+				'elementor-mcp/add-progress',
+				'elementor-mcp/add-progress-tracker',
+				'elementor-mcp/add-rating',
+				'elementor-mcp/add-blockquote',
+				'elementor-mcp/add-alert',
+				'elementor-mcp/add-author-box',
+				'elementor-mcp/add-price-list',
+				'elementor-mcp/add-price-table',
+				'elementor-mcp/add-share-buttons',
+				'elementor-mcp/add-reviews',
+				'elementor-mcp/add-portfolio',
+				'elementor-mcp/add-table-of-contents',
+				'elementor-mcp/add-menu-anchor',
+				'elementor-mcp/add-off-canvas',
+				'elementor-mcp/add-nested-accordion',
+				'elementor-mcp/add-nested-tabs',
+				'elementor-mcp/add-media-carousel',
+				'elementor-mcp/add-login',
+				'elementor-mcp/add-code-highlight',
+			),
+		),
+		'code_injection'   => array(
+			'setting'     => 'enable_group_code_injection',
+			'label'       => 'Code injection tools',
+			'description' => 'Security-sensitive PHP snippet and custom code CRUD tools. Enable only for trusted operators.',
+			'default'     => false,
+			'abilities'   => array(
+				'elementor-mcp/create-php-snippet',
+				'elementor-mcp/get-php-snippet',
+				'elementor-mcp/update-php-snippet',
+				'elementor-mcp/delete-php-snippet',
+				'elementor-mcp/validate-php-snippet',
+				'elementor-mcp/list-php-snippets',
+				'elementor/create-custom-code',
+				'elementor/get-custom-code',
+				'elementor/list-custom-code',
+				'elementor/update-custom-code',
+				'elementor/delete-custom-code',
+			),
+		),
+		'design_qa'        => array(
+			'setting'     => 'enable_group_design_qa',
+			'label'       => 'Design QA tools',
+			'description' => 'Style guide, design evaluation, token extraction, and official widget/pattern guidance tools.',
+			'default'     => false,
+			'abilities'   => array(
+				'elementor/get-style-guide',
+				'elementor/evaluate-design',
+				'elementor/suggest-design-fixes',
+				'elementor/extract-design-tokens',
+				'elementor/get-official-widget-catalog',
+				'elementor/get-official-pattern-guidance',
+			),
+		),
+		'form_submissions' => array(
+			'setting'     => 'enable_group_form_submissions',
+			'label'       => 'Form submissions',
+			'description' => 'Read and delete Elementor form submissions.',
+			'default'     => false,
+			'abilities'   => array(
+				'elementor/list-form-submissions',
+				'elementor/get-form-submission',
+				'elementor/delete-form-submission',
+			),
+		),
+		'site_maintenance' => array(
+			'setting'     => 'enable_group_site_maintenance',
+			'label'       => 'Site maintenance',
+			'description' => 'Maintenance mode, experiments, trash, and active kit operations.',
+			'default'     => false,
+			'abilities'   => array(
+				'elementor/get-maintenance-mode',
+				'elementor/update-maintenance-mode',
+				'elementor/list-experiments',
+				'elementor/update-experiment',
+				'elementor/empty-trash',
+				'elementor/set-active-kit',
+			),
+		),
+	);
+}
+
+/**
  * Return default plugin settings.
  *
  * @return array<string, bool>
  */
 function ampersand_elementor_mcp_orchestrator_default_settings(): array {
-	return array(
-		'enable_precision_tools'         => true,
-		'enable_construction_tools'      => true,
+	$settings = array(
 		'enable_editor_first_guardrails' => true,
 	);
+
+	foreach ( ampersand_elementor_mcp_orchestrator_tool_groups() as $group ) {
+		$settings[ (string) $group['setting'] ] = (bool) $group['default'];
+	}
+
+	return $settings;
+}
+
+/**
+ * Return setting keys that are rendered as checkboxes.
+ *
+ * @return array<string, bool>
+ */
+function ampersand_elementor_mcp_orchestrator_checkbox_setting_keys(): array {
+	$keys = array();
+
+	foreach ( ampersand_elementor_mcp_orchestrator_tool_groups() as $group ) {
+		$keys[ (string) $group['setting'] ] = true;
+	}
+
+	return $keys;
 }
 
 /**
@@ -293,10 +524,28 @@ function ampersand_elementor_mcp_orchestrator_default_settings(): array {
  * @return array<string, bool>
  */
 function ampersand_elementor_mcp_orchestrator_get_settings(): array {
-	$settings = get_option( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_OPTION, array() );
-	$settings = is_array( $settings ) ? $settings : array();
+	$stored   = get_option( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_OPTION, array() );
+	$stored   = is_array( $stored ) ? $stored : array();
+	$defaults = ampersand_elementor_mcp_orchestrator_default_settings();
+	$settings = $defaults;
 
-	return array_merge( ampersand_elementor_mcp_orchestrator_default_settings(), array_map( 'rest_sanitize_boolean', $settings ) );
+	foreach ( $defaults as $key => $default ) {
+		if ( array_key_exists( $key, $stored ) ) {
+			$settings[ $key ] = rest_sanitize_boolean( $stored[ $key ] );
+		}
+	}
+
+	return $settings;
+}
+
+/**
+ * Invalidate cached tool names.
+ *
+ * @param mixed ...$unused Unused hook arguments.
+ * @return void
+ */
+function ampersand_elementor_mcp_orchestrator_invalidate_tool_cache( ...$unused ): void {
+	update_option( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_TOOL_CACHE_SALT_OPTION, (string) time() . '-' . wp_rand(), false );
 }
 
 /**
@@ -306,12 +555,20 @@ function ampersand_elementor_mcp_orchestrator_get_settings(): array {
  * @return array<string, bool>
  */
 function ampersand_elementor_mcp_orchestrator_sanitize_settings( array $settings ): array {
-	$defaults  = ampersand_elementor_mcp_orchestrator_default_settings();
-	$sanitized = array();
+	$defaults      = ampersand_elementor_mcp_orchestrator_default_settings();
+	$checkbox_keys = ampersand_elementor_mcp_orchestrator_checkbox_setting_keys();
+	$sanitized     = array();
 
 	foreach ( $defaults as $key => $default ) {
-		$sanitized[ $key ] = isset( $settings[ $key ] ) ? rest_sanitize_boolean( $settings[ $key ] ) : false;
+		if ( isset( $checkbox_keys[ $key ] ) ) {
+			$sanitized[ $key ] = isset( $settings[ $key ] ) ? rest_sanitize_boolean( $settings[ $key ] ) : false;
+			continue;
+		}
+
+		$sanitized[ $key ] = isset( $settings[ $key ] ) ? rest_sanitize_boolean( $settings[ $key ] ) : $default;
 	}
+
+	ampersand_elementor_mcp_orchestrator_invalidate_tool_cache();
 
 	return $sanitized;
 }
@@ -334,6 +591,9 @@ function ampersand_elementor_mcp_orchestrator_register_settings(): void {
 }
 add_action( 'admin_init', 'ampersand_elementor_mcp_orchestrator_register_settings' );
 add_action( 'admin_post_' . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_ACTION, 'ampersand_elementor_mcp_orchestrator_handle_config_download' );
+add_action( 'activated_plugin', 'ampersand_elementor_mcp_orchestrator_invalidate_tool_cache' );
+add_action( 'deactivated_plugin', 'ampersand_elementor_mcp_orchestrator_invalidate_tool_cache' );
+add_action( 'upgrader_process_complete', 'ampersand_elementor_mcp_orchestrator_invalidate_tool_cache' );
 
 /**
  * Return active plugin map.
@@ -923,6 +1183,10 @@ function ampersand_elementor_mcp_orchestrator_render_settings_page(): void {
 	$app_passwords_available = ampersand_elementor_mcp_orchestrator_app_passwords_available();
 	$legacy_emcp_conflict    = ampersand_elementor_mcp_orchestrator_has_legacy_emcp_conflict();
 	$status                  = ampersand_elementor_mcp_orchestrator_plugin_status();
+	$settings                = ampersand_elementor_mcp_orchestrator_get_settings();
+	$tool_groups             = ampersand_elementor_mcp_orchestrator_tool_groups();
+	$tool_group_counts       = ampersand_elementor_mcp_orchestrator_tool_group_counts();
+	$tool_selection_counts   = ampersand_elementor_mcp_orchestrator_tool_selection_counts( $settings );
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only error display.
 	$error = isset( $_GET['amp_mcp_error'] ) ? sanitize_key( wp_unslash( $_GET['amp_mcp_error'] ) ) : '';
 	?>
@@ -953,6 +1217,106 @@ function ampersand_elementor_mcp_orchestrator_render_settings_page(): void {
 				<button type="submit" class="button button-primary button-hero" <?php disabled( ! $app_passwords_available ); ?>>Generate Application Password & Download JSON</button>
 			</p>
 		</form>
+
+		<h2>Tool Set</h2>
+		<p class="description" style="max-width: 820px;">The default curated core keeps the MCP server small enough for clients that struggle with very large tool lists. Enable extra groups only when the site needs them.</p>
+
+		<form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>" style="max-width: 820px;">
+			<?php settings_fields( 'ampersand_elementor_mcp_orchestrator' ); ?>
+			<input type="hidden" name="<?php echo esc_attr( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_OPTION ); ?>[enable_editor_first_guardrails]" value="1">
+
+			<p>
+				<strong>Selected tool slots:</strong>
+				<span id="amp-mcp-tool-count"><?php echo esc_html( (string) $tool_selection_counts['selected'] ); ?></span>
+				/
+				<?php echo esc_html( (string) AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_TOOL_WARNING_THRESHOLD ); ?> recommended max.
+				<span style="margin-left: 8px;">Currently registered: <span id="amp-mcp-available-tool-count"><?php echo esc_html( (string) $tool_selection_counts['available'] ); ?></span>.</span>
+			</p>
+			<div id="amp-mcp-tool-warning" class="notice notice-warning inline" <?php echo $tool_selection_counts['selected'] > AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_TOOL_WARNING_THRESHOLD ? '' : 'hidden'; ?>>
+				<p>Large tool sets may connect but fail to appear in some MCP clients. Keep the selected total near the recommended limit unless you are testing a client that can handle larger payloads.</p>
+			</div>
+
+			<table class="widefat striped">
+				<thead>
+					<tr>
+						<th style="width: 80px;">Expose</th>
+						<th>Group</th>
+						<th style="width: 170px;">Tools</th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $tool_groups as $group_id => $group ) : ?>
+						<?php
+						$setting_key = (string) $group['setting'];
+						$count       = $tool_group_counts[ $group_id ] ?? array(
+							'total'     => count( (array) $group['abilities'] ),
+							'available' => 0,
+						);
+						?>
+						<tr>
+							<td>
+								<label>
+									<input
+										type="checkbox"
+										class="amp-mcp-tool-group"
+										name="<?php echo esc_attr( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_OPTION . '[' . $setting_key . ']' ); ?>"
+										value="1"
+										data-tool-count="<?php echo esc_attr( (string) $count['total'] ); ?>"
+										data-available-count="<?php echo esc_attr( (string) $count['available'] ); ?>"
+										<?php checked( ! empty( $settings[ $setting_key ] ) ); ?>
+									>
+								</label>
+							</td>
+							<td>
+								<strong><?php echo esc_html( (string) $group['label'] ); ?></strong>
+								<br>
+								<span class="description"><?php echo esc_html( (string) $group['description'] ); ?></span>
+							</td>
+							<td>
+								<?php echo esc_html( (string) $count['total'] ); ?> selected
+								<br>
+								<span class="description"><?php echo esc_html( (string) $count['available'] ); ?> available now</span>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+
+			<?php submit_button( 'Save Tool Selection', 'secondary', 'submit', false, array( 'style' => 'margin-top: 12px;' ) ); ?>
+		</form>
+
+		<script>
+			(function () {
+				const threshold = <?php echo (int) AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_TOOL_WARNING_THRESHOLD; ?>;
+				const boxes = document.querySelectorAll('.amp-mcp-tool-group');
+				const totalEl = document.getElementById('amp-mcp-tool-count');
+				const availableEl = document.getElementById('amp-mcp-available-tool-count');
+				const warningEl = document.getElementById('amp-mcp-tool-warning');
+
+				function updateToolCount() {
+					let selected = 0;
+					let available = 0;
+
+					boxes.forEach(function (box) {
+						if (!box.checked) {
+							return;
+						}
+
+						selected += parseInt(box.dataset.toolCount || '0', 10);
+						available += parseInt(box.dataset.availableCount || '0', 10);
+					});
+
+					totalEl.textContent = selected.toString();
+					availableEl.textContent = available.toString();
+					warningEl.hidden = selected <= threshold;
+				}
+
+				boxes.forEach(function (box) {
+					box.addEventListener('change', updateToolCount);
+				});
+				updateToolCount();
+			}());
+		</script>
 
 		<h2>Plugin Status</h2>
 		<table class="widefat striped" style="max-width: 820px;">
@@ -986,6 +1350,144 @@ function ampersand_elementor_mcp_orchestrator_render_settings_page(): void {
 }
 
 /**
+ * Return registered ability names keyed by name.
+ *
+ * @return array<string, bool>
+ */
+function ampersand_elementor_mcp_orchestrator_registered_ability_map(): array {
+	if ( ! function_exists( 'wp_get_abilities' ) ) {
+		return array();
+	}
+
+	$registered = array();
+
+	foreach ( wp_get_abilities() as $ability ) {
+		if ( ! is_object( $ability ) || ! method_exists( $ability, 'get_name' ) ) {
+			continue;
+		}
+
+		$name = (string) $ability->get_name();
+
+		if ( '' !== $name ) {
+			$registered[ $name ] = true;
+		}
+	}
+
+	return $registered;
+}
+
+/**
+ * Return configured ability names from enabled groups.
+ *
+ * @param array<string, bool>|null $settings Optional settings override.
+ * @return string[]
+ */
+function ampersand_elementor_mcp_orchestrator_selected_tool_names( ?array $settings = null ): array {
+	$settings = is_array( $settings ) ? $settings : ampersand_elementor_mcp_orchestrator_get_settings();
+	$selected = array();
+
+	foreach ( ampersand_elementor_mcp_orchestrator_tool_groups() as $group ) {
+		$setting_key = (string) $group['setting'];
+
+		if ( empty( $settings[ $setting_key ] ) ) {
+			continue;
+		}
+
+		foreach ( (array) $group['abilities'] as $ability_name ) {
+			$selected[ (string) $ability_name ] = true;
+		}
+	}
+
+	return array_keys( $selected );
+}
+
+/**
+ * Return group counts for UI display.
+ *
+ * @return array<string, array<string, int>>
+ */
+function ampersand_elementor_mcp_orchestrator_tool_group_counts(): array {
+	$registered = ampersand_elementor_mcp_orchestrator_registered_ability_map();
+	$counts     = array();
+
+	foreach ( ampersand_elementor_mcp_orchestrator_tool_groups() as $group_id => $group ) {
+		$total     = 0;
+		$available = 0;
+
+		foreach ( (array) $group['abilities'] as $ability_name ) {
+			$total++;
+
+			if ( isset( $registered[ (string) $ability_name ] ) ) {
+				$available++;
+			}
+		}
+
+		$counts[ $group_id ] = array(
+			'total'     => $total,
+			'available' => $available,
+		);
+	}
+
+	return $counts;
+}
+
+/**
+ * Return selected and currently available tool counts.
+ *
+ * @param array<string, bool>|null $settings Optional settings override.
+ * @return array<string, int>
+ */
+function ampersand_elementor_mcp_orchestrator_tool_selection_counts( ?array $settings = null ): array {
+	$selected_names = ampersand_elementor_mcp_orchestrator_selected_tool_names( $settings );
+	$registered     = ampersand_elementor_mcp_orchestrator_registered_ability_map();
+	$available      = 0;
+
+	foreach ( $selected_names as $ability_name ) {
+		if ( isset( $registered[ $ability_name ] ) ) {
+			$available++;
+		}
+	}
+
+	return array(
+		'selected'  => count( $selected_names ),
+		'available' => $available,
+	);
+}
+
+/**
+ * Return cache key for selected tool names.
+ *
+ * @param array<string, bool> $settings Current settings.
+ * @return string
+ */
+function ampersand_elementor_mcp_orchestrator_tool_cache_key( array $settings ): string {
+	$encoded_settings = wp_json_encode( $settings );
+	$settings_hash    = md5( is_string( $encoded_settings ) ? $encoded_settings : serialize( $settings ) );
+	$salt             = (string) get_option( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_TOOL_CACHE_SALT_OPTION, '1' );
+
+	return 'amp_mcp_tools_' . md5( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION . '|' . $salt . '|' . $settings_hash );
+}
+
+/**
+ * Resolve selected Elementor ability names against currently registered abilities.
+ *
+ * @param array<string, bool> $settings Current settings.
+ * @return string[]
+ */
+function ampersand_elementor_mcp_orchestrator_resolve_tools( array $settings ): array {
+	$registered = ampersand_elementor_mcp_orchestrator_registered_ability_map();
+	$tools      = array();
+
+	foreach ( ampersand_elementor_mcp_orchestrator_selected_tool_names( $settings ) as $ability_name ) {
+		if ( isset( $registered[ $ability_name ] ) ) {
+			$tools[] = $ability_name;
+		}
+	}
+
+	return $tools;
+}
+
+/**
  * Collect selected Elementor ability names.
  *
  * @return string[]
@@ -995,28 +1497,19 @@ function ampersand_elementor_mcp_orchestrator_get_tools(): array {
 		return array();
 	}
 
-	$settings = ampersand_elementor_mcp_orchestrator_get_settings();
-	$tools    = array();
+	$settings  = ampersand_elementor_mcp_orchestrator_get_settings();
+	$cache_key = ampersand_elementor_mcp_orchestrator_tool_cache_key( $settings );
+	$cached    = get_transient( $cache_key );
 
-	foreach ( wp_get_abilities() as $ability ) {
-		if ( ! is_object( $ability ) || ! method_exists( $ability, 'get_name' ) ) {
-			continue;
-		}
-
-		$name = (string) $ability->get_name();
-
-		if ( $settings['enable_precision_tools'] && 0 === strpos( $name, 'elementor/' ) ) {
-			$tools[] = $name;
-		}
-
-		if ( $settings['enable_construction_tools'] && 0 === strpos( $name, 'elementor-mcp/' ) ) {
-			$tools[] = $name;
-		}
+	if ( is_array( $cached ) ) {
+		return array_values( array_filter( $cached, 'is_string' ) );
 	}
 
-	sort( $tools );
+	$tools = ampersand_elementor_mcp_orchestrator_resolve_tools( $settings );
 
-	return array_values( array_unique( $tools ) );
+	set_transient( $cache_key, $tools, HOUR_IN_SECONDS );
+
+	return $tools;
 }
 
 /**

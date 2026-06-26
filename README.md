@@ -11,6 +11,7 @@ The goal is simple: AI-assisted Elementor work should remain editable by non-pro
 - Provides a minimal admin page under `Settings -> Elementor MCP`.
 - Generates one JSON connection bundle for Claude Desktop, Codex, and direct HTTP MCP clients.
 - Includes diagnostics for installed/active Elementor MCP dependencies.
+- Exposes a curated default MCP tool set and optional expansion groups so clients are not overwhelmed by hundreds of tools.
 - Embeds guardrails that tell agents to use native Elementor widgets, templates, menus, global styles, and Theme Builder awareness instead of HTML blobs.
 - Checks GitHub Releases for plugin updates.
 
@@ -64,10 +65,15 @@ Settings -> Elementor MCP
 The page contains:
 
 - One button: `Generate Application Password & Download JSON`.
+- Tool-set controls with a curated core group enabled by default.
+- Opt-in groups for WooCommerce, Elementor v4 atomic widgets, extended widgets, code injection, design QA, form submissions, and site maintenance.
+- A live selected/available tool count and warning when the selected tool set is larger than the recommended client-safe threshold.
 - A compact plugin/capability status table.
 - Critical notices for missing Application Password support or EMCP Tools / legacy `elementor-mcp` conflicts.
 
 The plugin does not store generated Application Passwords. The password is written into the downloaded JSON file once. Store that file securely.
+
+The default tool selection intentionally avoids exposing every available Elementor ability. Large single-server MCP payloads may connect successfully but fail to surface tools in some AI clients. Enable expansion groups only when a project needs those capabilities.
 
 ## Generated JSON
 
@@ -157,6 +163,7 @@ The generated prompt instructs agents to:
 - Revoke old credentials from `Users -> Profile -> Application Passwords`.
 - Do not commit generated JSON files to Git.
 - Use the least-privileged WordPress admin account practical for MCP automation.
+- Keep code injection tools disabled unless the current operator is trusted to create or modify executable code.
 - Security plugins, WAFs, or hosting rules may block REST/MCP requests without a User-Agent. Generated configs include one.
 
 See [SECURITY.md](SECURITY.md) for reporting and operational guidance.
@@ -176,7 +183,7 @@ The repository/releases must be publicly reachable for this updater. Private Git
 Recommended release flow:
 
 1. Update the plugin header `Version` and `AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION`.
-2. Create a GitHub release tag such as `v1.4.1`.
+2. Create a GitHub release tag such as `v1.5.1`.
 3. Attach a plugin ZIP if available. The updater prefers release `.zip` assets and falls back to GitHub's source `zipball`.
 
 Updating the plugin does not revoke existing WordPress Application Passwords or invalidate already downloaded JSON config files. Old JSON files keep working as long as their Application Password remains valid. Download a fresh JSON when you want newer connection defaults.
@@ -198,6 +205,10 @@ Check security plugins, host WAF rules, REST access restrictions, Application Pa
 Tool count differs between environments
 
 Compare plugin versions, active ability providers, legacy folders, and environment-specific security/cache layers. The JSON `diagnostics` object helps with this.
+
+MCP connects and `tools/list` works, but tools do not appear in the AI client
+
+Reduce the enabled tool groups under `Settings -> Elementor MCP`. Some clients struggle to register very large single-server tool payloads even when the raw MCP request succeeds.
 
 The AI client is unsure which JSON section to install
 
