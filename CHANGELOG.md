@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.1 - 2026-07-14
+
+### Added
+
+- `Check for updates` link in the WordPress Plugins row to clear the orchestrator GitHub release cache and force WordPress plugin update checks.
+- `Visit site` link in the WordPress Plugins row pointing to the GitHub Releases page.
+- Admin notice after manual update checks explaining whether GitHub was reachable and whether a newer release was found.
+
 ## 1.6.0 - 2026-07-14
 
 ### Added

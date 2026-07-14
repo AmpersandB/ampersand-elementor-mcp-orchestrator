@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Ampersand Elementor MCP Orchestrator
  * Description: Orchestrates Elementor MCP abilities, exposes editor-first guardrails, and provides an admin prompt/settings page.
- * Version: 1.6.0
+ * Version: 1.6.1
  * Author: Ampersand Studios
  * License: GPL-2.0-or-later
  * Requires at least: 6.8
@@ -18,18 +18,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION', '1.6.0' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION', '1.6.1' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_OPTION', 'ampersand_elementor_mcp_orchestrator_settings' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_INSTANCE_OPTION', 'ampersand_elementor_mcp_orchestrator_instance_id' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_TOOL_CACHE_SALT_OPTION', 'ampersand_elementor_mcp_orchestrator_tool_cache_salt' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_APP_PASSWORD_NAME', 'Ampersand Elementor MCP' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_ACTION', 'ampersand_elementor_mcp_orchestrator_download_config' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_DOWNLOAD_NONCE', 'ampersand_elementor_mcp_orchestrator_download_config' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_CHECK_UPDATES_ACTION', 'ampersand_elementor_mcp_orchestrator_check_updates' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_CHECK_UPDATES_NONCE', 'ampersand_elementor_mcp_orchestrator_check_updates' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_TOOL_WARNING_THRESHOLD', 80 );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_SLUG', basename( __DIR__ ) );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_BASENAME', basename( __DIR__ ) . '/' . basename( __FILE__ ) );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY', 'AmpersandB/ampersand-elementor-mcp-orchestrator' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY_URL', 'https://github.com/' . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_RELEASES_URL', AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY_URL . '/releases' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_LATEST_RELEASE_URL', 'https://api.github.com/repos/' . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_REPOSITORY . '/releases/latest' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_RELEASE_CACHE_KEY', 'ampersand_elementor_mcp_orchestrator_github_release' );
 
@@ -275,6 +278,118 @@ function ampersand_elementor_mcp_orchestrator_fix_update_source_folder( $source,
 	return $desired_source;
 }
 add_filter( 'upgrader_source_selection', 'ampersand_elementor_mcp_orchestrator_fix_update_source_folder', 10, 4 );
+
+/**
+ * Add plugin-row links on Plugins screen.
+ *
+ * @param string[] $links Existing plugin row meta links.
+ * @param string   $file Plugin basename.
+ * @return string[]
+ */
+function ampersand_elementor_mcp_orchestrator_plugin_row_meta( array $links, string $file ): array {
+	if ( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_PLUGIN_BASENAME !== $file ) {
+		return $links;
+	}
+
+	$check_url = wp_nonce_url(
+		add_query_arg(
+			array(
+				'action' => AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_CHECK_UPDATES_ACTION,
+			),
+			admin_url( 'admin-post.php' )
+		),
+		AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_CHECK_UPDATES_NONCE
+	);
+
+	$links['ampersand_check_updates'] = sprintf(
+		'<a href="%s">%s</a>',
+		esc_url( $check_url ),
+		esc_html__( 'Check for updates', 'ampersand-elementor-mcp-orchestrator' )
+	);
+
+	$links['ampersand_visit_site'] = sprintf(
+		'<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>',
+		esc_url( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_GITHUB_RELEASES_URL ),
+		esc_html__( 'Visit site', 'ampersand-elementor-mcp-orchestrator' )
+	);
+
+	return $links;
+}
+add_filter( 'plugin_row_meta', 'ampersand_elementor_mcp_orchestrator_plugin_row_meta', 10, 2 );
+
+/**
+ * Force-refresh GitHub release metadata and WordPress update transients.
+ *
+ * @return void
+ */
+function ampersand_elementor_mcp_orchestrator_handle_check_updates(): void {
+	if ( ! current_user_can( 'update_plugins' ) ) {
+		wp_die( esc_html__( 'You are not allowed to check plugin updates.', 'ampersand-elementor-mcp-orchestrator' ) );
+	}
+
+	check_admin_referer( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_CHECK_UPDATES_NONCE );
+
+	delete_site_transient( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_RELEASE_CACHE_KEY );
+	delete_site_transient( 'update_plugins' );
+
+	$release = ampersand_elementor_mcp_orchestrator_get_github_release( true );
+	$status  = $release ? 'ok' : 'error';
+
+	if ( function_exists( 'wp_update_plugins' ) ) {
+		wp_update_plugins();
+	}
+
+	wp_safe_redirect(
+		add_query_arg(
+			array(
+				'amp_mcp_updates_checked' => $status,
+			),
+			self_admin_url( 'plugins.php' )
+		)
+	);
+	exit;
+}
+add_action( 'admin_post_' . AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_CHECK_UPDATES_ACTION, 'ampersand_elementor_mcp_orchestrator_handle_check_updates' );
+
+/**
+ * Show check-for-updates result on Plugins screen.
+ *
+ * @return void
+ */
+function ampersand_elementor_mcp_orchestrator_check_updates_notice(): void {
+	if ( ! current_user_can( 'update_plugins' ) ) {
+		return;
+	}
+
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only admin notice after nonce-protected redirect.
+	$status = isset( $_GET['amp_mcp_updates_checked'] ) ? sanitize_key( wp_unslash( $_GET['amp_mcp_updates_checked'] ) ) : '';
+
+	if ( '' === $status ) {
+		return;
+	}
+
+	if ( 'error' === $status ) {
+		echo '<div class="notice notice-error is-dismissible"><p><strong>Ampersand Elementor MCP Orchestrator:</strong> could not reach the GitHub Releases API. Please try again or check outbound HTTPS access.</p></div>';
+		return;
+	}
+
+	$release = ampersand_elementor_mcp_orchestrator_get_github_release();
+	$version = is_array( $release ) ? ampersand_elementor_mcp_orchestrator_release_version( $release ) : '';
+
+	if ( '' !== $version && version_compare( $version, AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION, '>' ) ) {
+		printf(
+			'<div class="notice notice-info is-dismissible"><p><strong>Ampersand Elementor MCP Orchestrator:</strong> GitHub release v%s is available. Use the update link in the plugin row.</p></div>',
+			esc_html( $version )
+		);
+		return;
+	}
+
+	printf(
+		'<div class="notice notice-success is-dismissible"><p><strong>Ampersand Elementor MCP Orchestrator:</strong> no newer GitHub release was found. Current version: v%s.</p></div>',
+		esc_html( AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION )
+	);
+}
+add_action( 'admin_notices', 'ampersand_elementor_mcp_orchestrator_check_updates_notice' );
 
 /**
  * Return MCP tool groups exposed by the orchestrator.

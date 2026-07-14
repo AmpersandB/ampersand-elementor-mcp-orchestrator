@@ -76,6 +76,8 @@ The plugin does not store generated Application Passwords. The password is writt
 
 The default tool selection intentionally avoids exposing every available Elementor ability. Large single-server MCP payloads may connect successfully but fail to surface tools in some AI clients. Enable expansion groups only when a project needs those capabilities.
 
+The WordPress `Plugins` row for this plugin also includes `Check for updates` and `Visit site` links. `Check for updates` clears the plugin's GitHub release cache and asks WordPress to refresh plugin update data immediately. `Visit site` opens the GitHub Releases page.
+
 ## Generated JSON
 
 The downloaded JSON includes:
@@ -190,6 +192,8 @@ https://github.com/AmpersandB/ampersand-elementor-mcp-orchestrator
 When a release tag is newer than the installed plugin version, WordPress can show the update in the normal Plugins/Updates screens.
 
 The repository/releases must be publicly reachable for this updater. Private GitHub updates require a separate token-authenticated download flow.
+
+Use `Plugins -> Ampersand Elementor MCP Orchestrator -> Check for updates` to bypass the plugin's cached GitHub release response and force a fresh WordPress update check.
 
 Recommended release flow:
 
