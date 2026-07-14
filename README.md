@@ -12,6 +12,7 @@ The goal is simple: AI-assisted Elementor work should remain editable by non-pro
 - Generates one JSON connection bundle for Claude Desktop, Codex, and direct HTTP MCP clients.
 - Includes diagnostics for installed/active Elementor MCP dependencies.
 - Exposes a curated default MCP tool set and optional expansion groups so clients are not overwhelmed by hundreds of tools.
+- Adds a compact read-only helper tool for finding Elementor template usages across posts/pages.
 - Embeds guardrails that tell agents to use native Elementor widgets, templates, menus, global styles, and Theme Builder awareness instead of HTML blobs.
 - Checks GitHub Releases for plugin updates.
 
@@ -141,6 +142,12 @@ When the official MCP Adapter and HTTP transport are active, this plugin registe
 /wp-json/mcp/ampersand-elementor-orchestrator
 ```
 
+## Ampersand Helper Tools
+
+The orchestrator registers a small helper ability in addition to provider tools:
+
+- `ampersand/find-template-usages`: scans editable posts/pages/templates for Elementor `template` widgets and `[elementor-template id="..."]` shortcodes referencing a template ID. It returns compact locations instead of full Elementor subtrees, which helps agents plan reusable component rollouts before editing many posts.
+
 ## Agent Guardrails
 
 The generated prompt instructs agents to:
@@ -155,6 +162,10 @@ The generated prompt instructs agents to:
 - Treat "success but no matches/no changes" as a no-op.
 - Back up before large Elementor JSON imports or content syncs.
 - Clear Elementor cache and verify rendered output after writes.
+- Verify saved data first, computed DOM styles second, and screenshots third so stale Elementor/CDN CSS is not mistaken for broken code.
+- Account for Elementor flex-control gating, row image widths, narrow-slot reusable card variants, and two-stop gradient limits.
+- Use template references for reusable components when future global edits are expected.
+- Pilot one page, report classified hit lists, and get approval before bulk replacements.
 
 ## Security Notes
 
@@ -205,6 +216,10 @@ Check security plugins, host WAF rules, REST access restrictions, Application Pa
 Tool count differs between environments
 
 Compare plugin versions, active ability providers, legacy folders, and environment-specific security/cache layers. The JSON `diagnostics` object helps with this.
+
+Rendered output looks unchanged after an Elementor edit
+
+Check saved Elementor data and computed DOM styles before rewriting. If those are correct, inspect whether the loaded `post-{id}.css?ver=` changed. If it did not, clear Elementor cache again and purge page/CDN cache when applicable.
 
 MCP connects and `tools/list` works, but tools do not appear in the AI client
 

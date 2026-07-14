@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Ampersand Elementor MCP Orchestrator
  * Description: Orchestrates Elementor MCP abilities, exposes editor-first guardrails, and provides an admin prompt/settings page.
- * Version: 1.5.0
+ * Version: 1.6.0
  * Author: Ampersand Studios
  * License: GPL-2.0-or-later
  * Requires at least: 6.8
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION', '1.5.0' );
+define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_VERSION', '1.6.0' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_OPTION', 'ampersand_elementor_mcp_orchestrator_settings' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_INSTANCE_OPTION', 'ampersand_elementor_mcp_orchestrator_instance_id' );
 define( 'AMPERSAND_ELEMENTOR_MCP_ORCHESTRATOR_TOOL_CACHE_SALT_OPTION', 'ampersand_elementor_mcp_orchestrator_tool_cache_salt' );
@@ -298,6 +298,7 @@ function ampersand_elementor_mcp_orchestrator_tool_groups(): array {
 				'elementor-mcp/get-widget-schema',
 				'elementor-mcp/get-global-settings',
 				'elementor-mcp/detect-elementor-version',
+				'ampersand/find-template-usages',
 				'elementor/find-elements',
 				'elementor/get-theme-builder-conditions',
 				'elementor-mcp/add-container',
@@ -669,6 +670,394 @@ function ampersand_elementor_mcp_orchestrator_dependencies(): array {
 }
 
 /**
+ * Register lightweight Ampersand helper abilities.
+ *
+ * @return void
+ */
+function ampersand_elementor_mcp_orchestrator_register_abilities(): void {
+	if ( ! function_exists( 'wp_register_ability' ) ) {
+		return;
+	}
+
+	wp_register_ability(
+		'ampersand/find-template-usages',
+		array(
+			'label'               => 'Find Elementor Template Usages',
+			'description'         => 'Scans editable content for Elementor template widgets and [elementor-template] shortcodes that reference a template ID. Returns compact usage locations without full Elementor subtrees.',
+			'category'            => 'site',
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'template_id' ),
+				'properties'           => array(
+					'template_id'              => array(
+						'type'        => 'integer',
+						'description' => 'Elementor template post ID to find.',
+					),
+					'post_types'               => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Post types to scan. Defaults to post, page, and elementor_library when available.',
+					),
+					'post_statuses'            => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'Post statuses to scan. Defaults to publish, draft, pending, private, and future.',
+					),
+					'limit'                    => array(
+						'type'        => 'integer',
+						'default'     => 500,
+						'description' => 'Maximum number of posts to scan in this call. Max 2000.',
+					),
+					'offset'                   => array(
+						'type'        => 'integer',
+						'default'     => 0,
+						'description' => 'Post query offset for batching large sites.',
+					),
+					'include_template_widgets' => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Search Elementor template widgets by settings.template_id.',
+					),
+					'include_shortcodes'       => array(
+						'type'        => 'boolean',
+						'default'     => true,
+						'description' => 'Search post content and Elementor string settings for [elementor-template id="..."] shortcodes.',
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'       => 'object',
+				'properties' => array(
+					'success'       => array( 'type' => 'boolean' ),
+					'template_id'   => array( 'type' => 'integer' ),
+					'scanned_count' => array( 'type' => 'integer' ),
+					'match_count'   => array( 'type' => 'integer' ),
+					'truncated'     => array( 'type' => 'boolean' ),
+					'matches'       => array( 'type' => 'array' ),
+					'message'       => array( 'type' => 'string' ),
+				),
+			),
+			'execute_callback'    => 'ampersand_elementor_mcp_orchestrator_find_template_usages',
+			'permission_callback' => function (): bool {
+				return current_user_can( 'edit_posts' );
+			},
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => true,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+			),
+		)
+	);
+}
+add_action( 'wp_abilities_api_init', 'ampersand_elementor_mcp_orchestrator_register_abilities' );
+
+/**
+ * Return sanitized string list input.
+ *
+ * @param mixed $value Raw input.
+ * @return string[]
+ */
+function ampersand_elementor_mcp_orchestrator_string_list( $value ): array {
+	if ( ! is_array( $value ) ) {
+		return array();
+	}
+
+	$items = array();
+
+	foreach ( $value as $item ) {
+		$item = sanitize_key( (string) $item );
+
+		if ( '' !== $item ) {
+			$items[] = $item;
+		}
+	}
+
+	return array_values( array_unique( $items ) );
+}
+
+/**
+ * Return default post types for template usage scans.
+ *
+ * @return string[]
+ */
+function ampersand_elementor_mcp_orchestrator_default_scan_post_types(): array {
+	$post_types = array( 'post', 'page' );
+
+	if ( post_type_exists( 'elementor_library' ) ) {
+		$post_types[] = 'elementor_library';
+	}
+
+	return $post_types;
+}
+
+/**
+ * Decode Elementor data meta into an array.
+ *
+ * @param mixed $raw Raw _elementor_data value.
+ * @return array<int|string, mixed>
+ */
+function ampersand_elementor_mcp_orchestrator_decode_elementor_data( $raw ): array {
+	if ( is_array( $raw ) ) {
+		return $raw;
+	}
+
+	if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
+		return array();
+	}
+
+	$decoded = json_decode( $raw, true );
+
+	return is_array( $decoded ) ? $decoded : array();
+}
+
+/**
+ * Return shortcode matches for a text value.
+ *
+ * @param string $text Text to scan.
+ * @param int    $template_id Target template ID.
+ * @return array<int, array<string, mixed>>
+ */
+function ampersand_elementor_mcp_orchestrator_find_template_shortcodes_in_text( string $text, int $template_id ): array {
+	if ( '' === $text || false === strpos( $text, '[elementor-template' ) ) {
+		return array();
+	}
+
+	preg_match_all( '/\[elementor-template\b[^\]]*\]/i', $text, $matches, PREG_SET_ORDER );
+
+	$occurrences = array();
+
+	foreach ( $matches as $match ) {
+		$shortcode = (string) ( $match[0] ?? '' );
+
+		if ( ! preg_match( '/\bid\s*=\s*["\']?(\d+)["\']?/i', $shortcode, $id_match ) || $template_id !== absint( $id_match[1] ?? 0 ) ) {
+			continue;
+		}
+
+		$occurrences[] = array(
+			'type'       => 'shortcode',
+			'shortcode'  => $shortcode,
+			'template_id' => $template_id,
+		);
+	}
+
+	return $occurrences;
+}
+
+/**
+ * Scan arbitrary Elementor settings for template shortcodes.
+ *
+ * @param mixed  $value Raw settings value.
+ * @param int    $template_id Target template ID.
+ * @param string $path Settings path.
+ * @return array<int, array<string, mixed>>
+ */
+function ampersand_elementor_mcp_orchestrator_scan_setting_shortcodes( $value, int $template_id, string $path = 'settings' ): array {
+	if ( is_string( $value ) ) {
+		$matches = ampersand_elementor_mcp_orchestrator_find_template_shortcodes_in_text( $value, $template_id );
+
+		foreach ( $matches as &$match ) {
+			$match['setting_path'] = $path;
+		}
+		unset( $match );
+
+		return $matches;
+	}
+
+	if ( ! is_array( $value ) ) {
+		return array();
+	}
+
+	$matches = array();
+
+	foreach ( $value as $key => $child ) {
+		$child_path = $path . '.' . sanitize_key( (string) $key );
+		$matches    = array_merge( $matches, ampersand_elementor_mcp_orchestrator_scan_setting_shortcodes( $child, $template_id, $child_path ) );
+	}
+
+	return $matches;
+}
+
+/**
+ * Recursively scan Elementor elements for template usages.
+ *
+ * @param mixed  $elements Elementor elements.
+ * @param int    $template_id Target template ID.
+ * @param bool   $include_template_widgets Whether to scan template widgets.
+ * @param bool   $include_shortcodes Whether to scan settings strings for shortcodes.
+ * @param string $path Element tree path.
+ * @return array<int, array<string, mixed>>
+ */
+function ampersand_elementor_mcp_orchestrator_scan_elementor_elements( $elements, int $template_id, bool $include_template_widgets, bool $include_shortcodes, string $path = 'root' ): array {
+	if ( ! is_array( $elements ) ) {
+		return array();
+	}
+
+	$occurrences = array();
+
+	foreach ( $elements as $index => $element ) {
+		if ( ! is_array( $element ) ) {
+			continue;
+		}
+
+		$element_path        = $path . '.' . (string) $index;
+		$element_id          = isset( $element['id'] ) ? sanitize_text_field( (string) $element['id'] ) : '';
+		$widget_type         = isset( $element['widgetType'] ) ? sanitize_key( (string) $element['widgetType'] ) : '';
+		$widget_type         = $widget_type ?: ( isset( $element['widget_type'] ) ? sanitize_key( (string) $element['widget_type'] ) : '' );
+		$settings            = isset( $element['settings'] ) && is_array( $element['settings'] ) ? $element['settings'] : array();
+		$position_in_parent  = is_numeric( $index ) ? (int) $index : null;
+
+		if ( $include_template_widgets && 'template' === $widget_type && $template_id === absint( $settings['template_id'] ?? 0 ) ) {
+			$occurrences[] = array(
+				'type'               => 'template_widget',
+				'element_id'         => $element_id,
+				'widget_type'        => $widget_type,
+				'path'               => $element_path,
+				'position_in_parent' => $position_in_parent,
+				'template_id'        => $template_id,
+			);
+		}
+
+		if ( $include_shortcodes && ! empty( $settings ) ) {
+			foreach ( ampersand_elementor_mcp_orchestrator_scan_setting_shortcodes( $settings, $template_id ) as $match ) {
+				$match['type']               = 'shortcode_in_elementor_setting';
+				$match['element_id']         = $element_id;
+				$match['widget_type']        = $widget_type;
+				$match['path']               = $element_path;
+				$match['position_in_parent'] = $position_in_parent;
+				$occurrences[]               = $match;
+			}
+		}
+
+		foreach ( array( 'elements', 'children' ) as $children_key ) {
+			if ( isset( $element[ $children_key ] ) && is_array( $element[ $children_key ] ) ) {
+				$occurrences = array_merge(
+					$occurrences,
+					ampersand_elementor_mcp_orchestrator_scan_elementor_elements(
+						$element[ $children_key ],
+						$template_id,
+						$include_template_widgets,
+						$include_shortcodes,
+						$element_path . '.' . $children_key
+					)
+				);
+			}
+		}
+	}
+
+	return $occurrences;
+}
+
+/**
+ * Execute the find-template-usages ability.
+ *
+ * @param mixed $input Raw ability input.
+ * @return array<string, mixed>
+ */
+function ampersand_elementor_mcp_orchestrator_find_template_usages( $input = array() ): array {
+	$input       = is_array( $input ) ? $input : array();
+	$template_id = absint( $input['template_id'] ?? 0 );
+
+	if ( ! $template_id ) {
+		return array(
+			'success' => false,
+			'message' => 'template_id is required.',
+		);
+	}
+
+	$post_types = ampersand_elementor_mcp_orchestrator_string_list( $input['post_types'] ?? array() );
+	$post_types = $post_types ? array_values( array_filter( $post_types, 'post_type_exists' ) ) : ampersand_elementor_mcp_orchestrator_default_scan_post_types();
+
+	if ( empty( $post_types ) ) {
+		return array(
+			'success'     => false,
+			'template_id' => $template_id,
+			'message'     => 'No valid post types were provided.',
+		);
+	}
+
+	$post_statuses            = ampersand_elementor_mcp_orchestrator_string_list( $input['post_statuses'] ?? array() );
+	$post_statuses            = $post_statuses ? $post_statuses : array( 'publish', 'draft', 'pending', 'private', 'future' );
+	$limit                    = max( 1, min( 2000, absint( $input['limit'] ?? 500 ) ) );
+	$offset                   = max( 0, absint( $input['offset'] ?? 0 ) );
+	$include_template_widgets = array_key_exists( 'include_template_widgets', $input ) ? rest_sanitize_boolean( $input['include_template_widgets'] ) : true;
+	$include_shortcodes       = array_key_exists( 'include_shortcodes', $input ) ? rest_sanitize_boolean( $input['include_shortcodes'] ) : true;
+
+	$query = new WP_Query(
+		array(
+			'post_type'              => $post_types,
+			'post_status'            => $post_statuses,
+			'posts_per_page'         => $limit + 1,
+			'offset'                 => $offset,
+			'fields'                 => 'ids',
+			'orderby'                => 'ID',
+			'order'                  => 'ASC',
+			'no_found_rows'          => true,
+			'ignore_sticky_posts'    => true,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		)
+	);
+
+	$post_ids  = is_array( $query->posts ) ? array_map( 'absint', $query->posts ) : array();
+	$truncated = count( $post_ids ) > $limit;
+	$post_ids  = array_slice( $post_ids, 0, $limit );
+	$matches   = array();
+	$scanned   = 0;
+
+	foreach ( $post_ids as $post_id ) {
+		if ( ! $post_id || ! current_user_can( 'edit_post', $post_id ) ) {
+			continue;
+		}
+
+		$scanned++;
+		$post        = get_post( $post_id );
+		$occurrences = array();
+
+		if ( $include_template_widgets || $include_shortcodes ) {
+			$elementor_data = ampersand_elementor_mcp_orchestrator_decode_elementor_data( get_post_meta( $post_id, '_elementor_data', true ) );
+			$occurrences    = array_merge(
+				$occurrences,
+				ampersand_elementor_mcp_orchestrator_scan_elementor_elements( $elementor_data, $template_id, $include_template_widgets, $include_shortcodes )
+			);
+		}
+
+		if ( $include_shortcodes && $post instanceof WP_Post ) {
+			foreach ( ampersand_elementor_mcp_orchestrator_find_template_shortcodes_in_text( $post->post_content, $template_id ) as $match ) {
+				$match['type'] = 'shortcode_in_post_content';
+				$occurrences[] = $match;
+			}
+		}
+
+		if ( empty( $occurrences ) || ! $post instanceof WP_Post ) {
+			continue;
+		}
+
+		$matches[] = array(
+			'post_id'     => $post_id,
+			'title'       => get_the_title( $post_id ),
+			'post_type'   => $post->post_type,
+			'post_status' => $post->post_status,
+			'edit_url'    => get_edit_post_link( $post_id, 'raw' ) ?: '',
+			'permalink'   => get_permalink( $post_id ) ?: '',
+			'occurrences' => $occurrences,
+		);
+	}
+
+	return array(
+		'success'       => true,
+		'template_id'   => $template_id,
+		'scanned_count' => $scanned,
+		'match_count'   => count( $matches ),
+		'truncated'     => $truncated,
+		'matches'       => $matches,
+		'message'       => $truncated ? 'Scan reached the requested limit. Increase offset to continue.' : 'Scan complete.',
+	);
+}
+
+/**
  * Return the canonical prompt.
  *
  * @return string
@@ -714,6 +1103,31 @@ Before writing or changing Elementor data:
 6. Reuse existing global styles and components when possible.
 7. If missing, create clear reusable global colors/fonts/templates/components and document them.
 8. Do not assume Elementor defaults are neutral. Padding, gap, flex sizing, grid columns, background rendering, and cached CSS can change the final output.
+
+Elementor flex/layout mechanics:
+
+- Widget-level flex controls are gated. `_flex_grow` and `_flex_shrink` on a widget render CSS only when `_flex_size` is set to `custom`. Set `_flex_size: "custom"` before relying on widget grow/shrink values.
+- A container `width` control is a hard cap, not a flex-basis. In a row layout, give fixed items such as logos and buttons explicit widths and let exactly one flexible column carry `flex_grow`.
+- Image widgets default to full width inside flex rows and can starve siblings. Set explicit widths for images placed in rows.
+- Do not rely on `flex-wrap` to rescue reusable components placed inside narrow desktop slots. For components that must work in both wide and narrow placements, maintain horizontal and vertical template variants and choose the correct variant per placement.
+- Button background gradients support only two color stops in normal Elementor controls. If a source design has more stops, drop the least-visible stop and report the deviation.
+
+Cache-aware verification:
+
+- Verify in this order: saved data through the API, computed styles in the rendered DOM, then screenshot. A screenshot alone can be stale when Elementor CSS, page cache, or a CDN is involved.
+- `elementor/clear-cache` may clear data without changing the loaded `post-{id}.css?ver=` asset. If rendered output looks unchanged, check whether the CSS file version changed before rewriting working Elementor data.
+- If the saved data and computed DOM are correct but the edge still serves stale CSS, ask for a CDN/page-cache purge instead of repeatedly changing the page.
+- After editing a template, remember that its CSS is scoped to `.elementor-{template_id}` and may be loaded separately by embedded pages. Clear site-wide Elementor cache when template output is stale.
+
+Reusable component discovery and rollout:
+
+- Reusable Elementor cards/components are often inserted as `template` widgets via `settings.template_id` or as `[elementor-template id="..."]` shortcodes. Brand keyword searches can miss template references and can also produce false positives from editorial text.
+- To find template usage, use the orchestrator helper `ampersand/find-template-usages` when available. Otherwise search for `widget_type: "template"` / `widgetType: "template"` and inspect `template_id` values.
+- To identify inline cards before replacing them, search for durable signals such as a tracking domain or CTA URL, then confirm the hit is a real card structure with image and button rather than an editorial text link.
+- Avoid large `find-elements` payloads. Prefer widget-type filters with small limits, fetch containers without full child data when possible, and drill down selectively.
+- To replace an inline card while preserving position, add the replacement inside the old card container, remove the old children, and strip the old container's card styling. This keeps width, margins, and document position stable.
+- Insert reusable components by template reference, not by duplicating full widget trees, when one future edit should update every placement. Confirm that reusable-template strategy with the user before rollout.
+- For bulk replacement work, pilot one page first, get explicit rendered approval, then scan the full set. Report a hit list and classify hits as real component vs text mention before changing many posts.
 
 When source material is a PDF, menu, spreadsheet, or external document:
 

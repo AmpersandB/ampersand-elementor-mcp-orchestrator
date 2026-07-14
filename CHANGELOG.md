@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.0 - 2026-07-14
+
+### Added
+
+- `ampersand/find-template-usages` read-only helper ability for compact site-wide scans of Elementor template widget and `[elementor-template]` shortcode usage.
+- Agent prompt guardrails for Elementor flex control gating, row image widths, reusable horizontal/vertical template variants, two-stop gradient limits, cache-aware verification, and bulk rollout safety.
+- Guidance for finding reusable component placements without relying on fragile brand keyword searches.
+
+### Changed
+
+- Curated core tool set now includes the Ampersand template usage helper, bringing the default selected core to 69 tools.
+- Prompt verification flow now explicitly separates saved data, computed DOM styles, screenshots, Elementor CSS cache, and edge/CDN cache.
+
 ## 1.5.0 - 2026-06-26
 
 ### Added
